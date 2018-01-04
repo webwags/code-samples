@@ -1,0 +1,284 @@
+ <?php
+/**
+ * @file
+ * Module for a Practice's custom My Resource Center page.
+ */
+
+/**
+ * Implementation of hook_menu().
+ */
+function qpp_my_resource_center_menu() {
+$items['my-resource-center/%'] = array(
+		'type' => MENU_NORMAL_ITEM,
+		'title' => 'My Resource Center',
+		'page callback' => 'qpp_my_resource_center_pid',
+    	'page arguments' => array(2), // The matched wildcard.
+    	'access callback' => TRUE,
+	);
+  return $items;
+}
+
+/**
+ * Page callback.
+ */
+
+		
+	
+// Determining Role
+function qpp_my_resource_center_pid() {
+	if ((arg(0) && arg(0) == 'my-resource-center') && (arg(1) && is_numeric(arg(1))))  {
+$pid = arg(1);
+global $user;
+
+$practice  = user_load($pid);
+$aid  = $user->uid;
+$date = $user->login;
+$access = format_date($date, 'custom','Y-m-d/H:i:s'); 
+// Checking server
+$mipscastlink ='';
+global $base_url;
+
+if ($aid == $pid) {
+if($base_url == 'https://www.qppresourcecenter.com'){
+$mipscastlink = 'https://mipscast.org/altarum/qppconnector?uid=' . $pid .'&access=' . $date;
+}elseif($base_url == 'https://stage.qppresourcecenter.com'){
+$mipscastlink ='https://glptntraining.altarum.org/altarum/qppconnector?uid=' . $pid .'&access=' . $date;
+}elseif($base_url == 'https://dev.qppresourcecenter.com'){
+$mipscastlink ='https://glptnqa.altarum.org/altarum/qppconnector?uid=' . $pid .'&access=' . $date;
+}else{
+$mipscastlink ='https://glptnqa.altarum.org/altarum/qppconnector?uid=' . $pid .'&access=' . $date;
+}
+}else{
+if($base_url == 'https://www.qppresourcecenter.com'){
+$mipscastlink = 'https://mipscast.org/altarum/qppconnector?uid=' . $aid .'&access=' . $date;
+}elseif($base_url == 'https://stage.qppresourcecenter.com'){
+$mipscastlink ='https://glptntraining.altarum.org/altarum/qppconnector?uid=' . $aid .'&access=' . $date;
+}elseif($base_url == 'https://dev.qppresourcecenter.com'){
+$mipscastlink ='https://glptnqa.altarum.org/altarum/qppconnector?uid=' . $aid .'&access=' . $date;
+}else{
+$mipscastlink ='https://glptnqa.altarum.org/altarum/qppconnector?uid=' . $aid .'&access=' . $date;
+}	
+}
+
+
+$stateTID = (isset($practice->field_state_terms['und'][0]['tid']))?$practice->field_state_terms['und'][0]['tid']:'';
+
+$stateTerm = taxonomy_term_load($stateTID); 
+
+
+$sdoCheck0TID = (isset($practice->field_sdo_type['und'][0]['tid']))?$practice->field_sdo_type['und'][0]['tid']:'';
+$sdoCheck1TID = (isset($practice->field_sdo_type['und'][1]['tid']))?$practice->field_sdo_type['und'][1]['tid']:'';
+
+if ($sdoCheck0TID ==  457 || $sdoCheck1TID ==  457) {
+	$sdoTID =  (isset($practice->field_commercial_sdo['und'][0]['target_id']))?$practice->field_commercial_sdo['und'][0]['target_id']:'';
+}else{
+	$sdoTID =  (isset($practice->field_grant_sdo['und'][0]['target_id']))?$practice->field_grant_sdo['und'][0]['target_id']:'';
+}
+if(isset($sdoTID)){
+$sdoTerm = taxonomy_term_load($sdoTID); 
+}
+if ($sdoTerm) {
+// NEW Getting fields for MY QPP ADVISOR TEAM
+$sdoPartner = (isset($sdoTerm->name))?$sdoTerm->name:'';
+$sdoEmail = (isset($sdoTerm->field_email['und'][0]['email']))?$sdoTerm->field_email['und'][0]['email']:'';
+$sdoPhone = (isset($sdoTerm->field_phone['und'][0]['value']))?$sdoTerm->field_phone['und'][0]['value']:'';
+$sdoHours = (isset($sdoTerm->field_hours_of_operation['und'][0]['value']))?$sdoTerm->field_hours_of_operation['und'][0]['value']:'';
+$sdoAddress = (isset($sdoTerm->field_address['und'][0]['value']))?$sdoTerm->field_address['und'][0]['value']:'';
+}else{
+// OLD Getting fields for MY QPP ADVISOR TEAM
+$sdoPartner = (isset($stateTerm->field_partner_name['und'][0]['value']))?$stateTerm->field_partner_name['und'][0]['value']:'';
+$sdoEmail = (isset($stateTerm->field_email['und'][0]['email']))?$stateTerm->field_email['und'][0]['email']:'';
+$sdoPhone = (isset($stateTerm->field_phone['und'][0]['value']))?$stateTerm->field_phone['und'][0]['value']:'';
+$sdoHours = (isset($stateTerm->field_hours_of_operation['und'][0]['value']))?$stateTerm->field_hours_of_operation['und'][0]['value']:'';
+$sdoAddress = (isset($stateTerm->field_address['und'][0]['value']))?$stateTerm->field_address['und'][0]['value']:'';
+
+}
+
+$status = (isset($practice->field_practice_status['und'][0]['tid']))?$practice->field_practice_status['und'][0]['tid']:'';
+// Checking status of Pratice to Create Buttons
+// SP Welcome Message
+$spWelcomeMessage = array( 398, 399, 400);
+// SP MY TEAM
+$spMyTeamActive = array( 398, 399, 400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 418, 410, 411, 412, 413, 414, 415, 416, 417, 419, 420, 421, 422, 423);
+$spMyTeamCompleted = array(406, 407, 408, 409, 418, 410, 411, 412, 413, 414, 415, 416, 417, 419, 420, 421, 422, 423);
+// EP EDUCATION
+$epEducationActive = array(406, 407, 408, 409, 418, 410, 411, 412, 413, 414, 415, 416, 417, 419, 420, 421);
+$epEducationCompleted = array(410, 411, 412, 413, 414, 415, 416, 417, 419, 420, 421);
+// EP READINESS ASSESSMENT
+$epRAActive = array(410, 411, 412, 413, 414, 415, 416, 417, 419, 420, 421);
+$epRACompleted = array( 413, 414, 415, 416, 417, 419, 420, 421);
+// EP PROJECT PLAN
+$epPPActive = array(414, 415, 416, 417, 419, 420, 421);
+// EP RESOURCES
+$epResourcesActive = array(414, 415, 416, 417, 419, 420, 421);
+// EP MIPScast
+$epMIPScastActive = array(414, 415, 416, 417, 419, 420, 421);
+// IM MIPScast
+$imMiPScastActive = array(415, 416, 417, 419, 420, 421);
+// IM ATTESTATION TOOLKIT
+$imAtoolkitActive = array(415, 416, 417, 419, 420, 421);
+// IM RESOURCES
+$imResourcesActive = array(415, 416, 417, 419, 420, 421);
+
+// Building SP MY TEAM Button
+if(in_array($status, $spMyTeamCompleted)){
+$spMyTeamButton =	'<a href="/user/' . $pid . '" class="completed"><img class="img-responsive ie-fix" src="/sites/default/files/images/my-team-block-completed.png"  alt="My Team"/></a>';
+	}elseif(in_array($status, $spMyTeamActive)){ 
+$spMyTeamButton =	'<a href="/user/' . $pid . '" class="active"><img class="img-responsive ie-fix" src="/sites/default/files/images/my-team-block-active.png"  alt="My Team"/></a>';
+	}else{
+$spMyTeamButton =	'<a href="" class="inactive"><img class="img-responsive ie-fix" src="/sites/default/files/images/my-team-block-inactive.png"  alt="My Team"/></a>';
+		}
+// Building WELCOME Block
+$mid = 101;
+
+$welcomeMessageNode = node_load($mid); // $nid contains the node id
+
+$welcomeMessagetext = (isset($welcomeMessageNode->body['und'][0]['value']))?$welcomeMessageNode->body['und'][0]['value']:'';
+
+if (in_array($status, $spWelcomeMessage)){
+if($welcomeMessagetext){ 
+$welcomeMessage  = '<div class="resourcebox-tripple-sized"><div class="message-box-blue clearfix"><p class="on-screen-message">' . $welcomeMessagetext  . '</p></div></div>';
+}else{
+	$welcomeMessage  = '';
+}	
+}else{
+	$welcomeMessage  = '';
+}
+// Building EP EDUCATION Button
+if(in_array($status, $epEducationCompleted)){
+$epEducationButton =	'<a href="/my-resource-center/' . $pid . '/education" class="completed"><img class="img-responsive ie-fix" src="/sites/default/files/images/eduction-block-completed.png"  alt="Education"/></a>';
+	}elseif(in_array($status, $epEducationActive)){ 
+$epEducationButton =	'<a href="/my-resource-center/' . $pid . '/education" class="active"><img class="img-responsive ie-fix" src="/sites/default/files/images/eduction-block-active.png"  alt="Education"/></a>';
+	}else{
+$epEducationButton =	'<a href="" class="inactive"><img class="img-responsive ie-fix" src="/sites/default/files/images/eduction-block-inactive.png"  alt="Education"/></a>';
+		}
+// Building EP READINESS ASSESSMENT Button
+$checkRA = entity_load('node', FALSE, array('uid' => $pid, 'type' => 'readiness_assessment'));
+if ($checkRA) {
+$raPath =  '/my-resource-center/' . $pid . '/readiness-assessment';	
+} else { 
+$raPath =  '/node/add/readiness-assessment/' . $pid ;
+}
+if(in_array($status, $epRACompleted)){
+$epRAButton =	'<a href="' . $raPath . '" class="completed"><img class="img-responsive ie-fix" src="/sites/default/files/images/readiness-assessment-block-completed.png"  alt="Readiness Assessment"/></a>';
+	}elseif(in_array($status, $epRAActive)){ 
+$epRAButton =	'<a href="' . $raPath . '" class="active"><img class="img-responsive ie-fix" src="/sites/default/files/images/readiness-assessment-block-active.png"  alt="Readiness Assessment"/></a>';
+	}else{
+$epRAButton =	'<a href="" class="inactive"><img class="img-responsive ie-fix" src="/sites/default/files/images/readiness-assessment-block-inactive.png"  alt="Readiness Assessment"/></a>';
+		}
+// Building EP PROJECT PLAN Button
+if(in_array($status, $epPPActive)){
+$epPPButton =	'<a href="/my-resource-center/' . $pid . '/project-plans" class="active"><img class="img-responsive ie-fix" src="/sites/default/files/images/project-plan-block-active.png"  alt="Project Plan"/></a>';
+	}else{
+$epPPButton =	'<a href="" class="inactive"><img class="img-responsive ie-fix" src="/sites/default/files/images/project-plan-block-inactive.png"  alt="Project Plan"/></a>';
+		}	
+// Building EP RESOURCES Button
+if(in_array($status, $epResourcesActive)){
+$epResourcesButton =	'<a href="/resources?f[0]=field_phase%3A53" class="active"><img class="img-responsive ie-fix" src="/sites/default/files/images/resources-block-active.png"  alt="Resources"/></a>';
+	}else{
+$epResourcesButton =	'<a href="" class="inactive"><img class="img-responsive ie-fix" src="/sites/default/files/images/resources-block-inactive.png"  alt="Resources"/></a>';
+		}
+// Building EP MIPScast Button
+if(in_array($status, $epMIPScastActive) &&  $mipscastlink != ''){
+$epMIPScastButton =	'<a target="_blank" href="' . $mipscastlink . '" class="active"><img class="img-responsive ie-fix" src="/sites/default/files/images/mipscast-block-active.png"  alt="MIPScast"/></a>';
+	}else{
+$epMIPScastButton =	'<a href="" class="inactive"><img class="img-responsive ie-fix" src="/sites/default/files/images/mipscast-block-inactive.png"  alt="MIPScast"/></a>';
+		}
+// Building IM MIPScast Button
+if(in_array($status, $imMiPScastActive) &&  $mipscastlink != ''){
+$imMiPScastButton =	'<a target="_blank" href="'. $mipscastlink . '" class="active"><img class="img-responsive ie-fix" src="/sites/default/files/images/mipscast-block-active.png"  alt="MIPScast"/></a>';
+	}else{
+$imMiPScastButton =	'<a href="" class="inactive"><img class="img-responsive ie-fix" src="/sites/default/files/images/mipscast-block-inactive.png"  alt="MIPScast"/></a>';
+		}
+// Building IM ATTESTATION TOOLKIT Button
+if(in_array($status, $imAtoolkitActive)){
+$imAtoolkitButton =	'<a href="/my-resource-center/' . $pid . '/resource" class="active"><img class="img-responsive ie-fix" src="/sites/default/files/images/attestation-toolkit-block-active.png"  alt="Attestation Toolkit"/></a>';
+	}else{
+$imAtoolkitButton =	'<a href="" class="inactive"><img class="img-responsive ie-fix" src="/sites/default/files/images/attestation-toolkit-block-inactive.png"  alt="Attestation Toolkit"/></a>';
+		}
+// Building IM RESOURCES Button
+if(in_array($status, $imResourcesActive)){
+$imResourcesButton =	'<a href="/resources/implement-measure" class="active"><img class="img-responsive ie-fix" src="/sites/default/files/images/resources-block-active.png"  alt="Resources"/></a>';
+	}else{
+$imResourcesButton =	'<a href="" class="inactive"><img class="img-responsive ie-fix" src="/sites/default/files/images/resources-block-inactive.png"  alt="Resources"/></a>';
+		}
+
+
+$check_point = qpp_check_point($pid);
+if (	$check_point){
+$sid = qpp_check_status($pid);
+$status = qpp_set_term_name($sid);
+$output = '';
+//$output .= qpp_check_point($pid);
+//$output .= $status;
+if (	$sdoPartner){  
+$advisorTeam = '<div id="advisor-team" class="clearfix">
+  <section class="advisor-team">
+    <div class="message-box-green clearfix"><div class="message-box-green-img"><img class="img-responsive ie-fix" src="/sites/default/files/images/advisor-team.png"  alt="MY QPP ADVISOR TEAM"/></div>
+      <p class="on-screen-message"><strong>MY QPP ADVISOR TEAM</strong><br/>' . $sdoPartner .' | '. $sdoEmail .' | '. $sdoPhone .' | HOURS: '. $sdoHours .' </p>
+    </div>
+  </section>
+</div>';
+}else{
+$advisorTeam = '';
+}
+
+$output .= $advisorTeam . '<div id="red-phase" class="clearfix phase-container">
+  <section class="phase  clearfix">
+    <div class="phase-bar">
+      <h3><span>Starting Point<img class="icon-responsive" src="/sites/default/files/images/starting-point-flag.png"  alt="Starting Point"/></span></h3>
+    </div>
+    <div class="resourcebox">' . $spMyTeamButton . '</div>'
+	. $welcomeMessage  .
+  '</section>
+</div>
+<div id="orange-phase" class="clearfix phase-container">
+  <section class="phase  clearfix">
+    <div class="phase-bar">
+      <h3><span>Empowered Planning<img class="icon-responsive" src="/sites/default/files/images/empowered-planning-check.png"  alt="Empowered Planning"/></span></h3>
+    </div>
+    <div class="resourcebox">' . $epEducationButton . '</div>
+    <div class="resourcebox">' . $epRAButton . '</div>
+    <div class="resourcebox">' . $epPPButton . '</div>
+	<div class="resourcebox">' . $epResourcesButton . '</div>
+    <div class="resourcebox">' . $epMIPScastButton . '</div>
+    <div class="resourcebox"> </div>
+  </section>
+</div>
+<div id="green-phase" class="clearfix phase-container">
+  <section class="phase  clearfix">
+    <div class="phase-bar">
+      <h3><span>Implement & Measure<img class="icon-responsive" src="/sites/default/files/images/implement-measure-rocket.png"  alt="Implement & Measure"/></span></h3>
+    </div>
+    <div class="resourcebox">' . $imMiPScastButton . '</div>
+	<div class="resourcebox">' . $imAtoolkitButton . '</div>
+	<div class="resourcebox">' . $imResourcesButton . '</div>
+    <div class="resourcebox"> </div>
+    <div class="resourcebox"> </div>
+    <div class="resourcebox"> </div>
+  </section>
+</div>';
+ 
+ 
+	}else{
+		
+	$output = 'Sorry you do not have access to this account';
+		
+	}
+	}
+	
+
+  return theme('my_resource_center',array('results' => $output));
+}
+
+function qpp_my_resource_center_theme() {
+  return array(
+    'my_resource_center' => array(
+     'template' => 'my_resource_center',
+      'variables' => array(
+        'results' => NULL,
+      ),
+     ),
+  );
+}
+

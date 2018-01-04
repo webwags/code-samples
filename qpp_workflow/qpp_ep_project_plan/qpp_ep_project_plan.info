@@ -1,0 +1,6 @@
+name = QPP Empowered Planning Project Plan
+description = Sub module to select Empowered Planning Project Plan based on the criteria provided.
+core = 7.x
+package = "QPP Workflow"
+
+dependencies[] = qpp_workflow

@@ -1,0 +1,6 @@
+name = QPP Practice Status
+description = Sub module to track the current status of Practice and update status after the next stage is completed.
+core = 7.x
+package = "QPP Workflow"
+
+dependencies[] = qpp_workflow

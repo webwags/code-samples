@@ -1,0 +1,6 @@
+name = QPP My Resource Center
+description = A module to manage My Resource Center Page for Pratices.
+core = 7.x
+package = "QPP Workflow"
+version = "7.x-0.1"
+dependencies[] = qpp_workflow

@@ -1,0 +1,4 @@
+name = QPP Reports
+description = Custom module to generate reports and export to excel
+core = 7.x
+package = "QPP Workflow"

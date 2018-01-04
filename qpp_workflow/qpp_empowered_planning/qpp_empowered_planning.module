@@ -1,0 +1,184 @@
+<?php
+/*
+ * @file
+ * Sub module to manage Empowered Planning functions and workflow.
+ *
+ */
+/*
+ * Implements hook_menu().
+ */
+function qpp_empowered_planning_menu(){
+	$items = array();
+	$items['my-resource-center/%/welcome-to-the-qpp-resource-center'] = array(
+		'type' => MENU_NORMAL_ITEM,
+		'title' => 'Welcome To The QPP Resource Center',
+		'description' => 'Welcome To The QPP Resource Center',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('qpp_empowered_planning_form'),
+		'access arguments' => array('access content'),
+	);
+	$items['my-resource-center/%/qpp-101'] = array(
+		'type' => MENU_NORMAL_ITEM,
+		'title' => 'QPP 101',
+		'description' => 'QPP 101',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('qpp_empowered_planning_form'),
+		'access arguments' => array('access content'),
+	);
+	$items['my-resource-center/%/readiness-assessment-preparation'] = array(
+		'type' => MENU_NORMAL_ITEM,
+		'title' => 'Readiness Assessment Preparation',
+		'description' => 'Readiness Assessment Preparation',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('qpp_empowered_planning_form'),
+		'access arguments' => array('access content'),
+	);
+	$items['my-resource-center/%/education'] = array(
+		'type' => MENU_NORMAL_ITEM,
+		'title' => 'Education',
+		'description' => 'Education',
+		'page callback' => 'qpp_empowered_planning_education_page',
+		'access arguments' => array('access content'),
+	);
+	return $items;
+}	
+
+/*
+ * Implements hook_form().
+ */
+function qpp_empowered_planning_form($form, &$form_state){
+	
+	$form = array();
+	
+	if((arg(0) && arg(0) == 'my-resource-center') && (arg(1) && is_numeric(arg(1)))){
+		if(qpp_check_point(arg(1)) == TRUE){	
+			$status = qpp_check_status(arg(1));
+			if(arg(2) && arg(2) == 'welcome-to-the-qpp-resource-center'){
+				$resource = qpp_resource_load(96);
+				$form['welcome_video'] = array(
+					'#type' => 'markup',
+					'#markup' => $resource,
+				);
+				if($status == 407){
+					$form['training_completed'] = array(
+						'#type' => 'submit',
+						'#name' => 'welcome_video_viewed',
+						'#value' => t('Viewed'),
+					);
+				}
+			}else if((arg(2)) && arg(2) == 'qpp-101'){
+				$resource = qpp_resource_load(97);
+				$form['qpp_101'] = array(
+					'#type' => 'markup',
+					'#markup' => $resource,
+				);
+				if($status == 408){
+					$form['training_completed'] = array(
+						'#type' => 'submit',
+						'#name' => 'qpp_101_viewed',
+						'#value' => t('Viewed'),
+					);
+				}			
+			}else if((arg(2)) && arg(2) == 'readiness-assessment-preparation'){
+				$resource = qpp_resource_load(98);
+				$form['readiness-assessment-preparation'] = array(
+					'#type' => 'markup',
+					'#markup' => $resource,
+				);
+				if($status == 409){
+					$form['training_completed'] = array(
+						'#type' => 'submit',
+						'#name' => 'readiness_assessment_viewed',
+						'#value' => t('Viewed'),
+					);
+				}			
+			}
+		}
+	}	
+	return $form;
+} 
+
+/*
+ * Implements hook_form_submit. Update user account with Watched/Viewed flag.
+ */
+function qpp_empowered_planning_form_submit($form, &$form_state){
+	if((arg(0) && arg(0) == 'my-resource-center') && (arg(1) && is_numeric(arg(1)))){
+		if(qpp_check_point(arg(1)) == TRUE){
+			global $base_url;
+			$status = qpp_check_status(arg(1));
+			$practice = user_load(arg(1));	
+			switch($status){
+				// field for welcome video
+				case '407':
+					if($form_state['clicked_button']['#name'] == 'welcome_video_viewed'){
+						$practice_wrapper = entity_metadata_wrapper('user', $practice);
+						$practice_wrapper->field_ep_welcome_to_qpp_video->set(1);
+						$practice_wrapper->save();
+						qpp_update_status($practice->uid, 408);	
+						qpp_workflow_notifications($status, $practice->uid, 22);
+						$form_state['redirect'] = $base_url . '/my-resource-center/'.$practice->uid.'/education';
+						drupal_set_message(t('The changes have been saved.'));
+					}		
+					break;
+				// field for QPP 101
+				case '408':
+					if($form_state['clicked_button']['#name'] == 'qpp_101_viewed'){
+						$practice_wrapper = entity_metadata_wrapper('user', $practice);
+						$practice_wrapper->field_ep_qpp_101_video->set(1);
+						$practice_wrapper->save();			
+						qpp_update_status($practice->uid, 409);
+						qpp_workflow_notifications($status, $practice->uid, 23);
+						$form_state['redirect'] = $base_url . '/my-resource-center/'.$practice->uid.'/education';
+						drupal_set_message(t('The changes have been saved.'));
+					}
+					break;
+				// field for Readiness Assessment Preparation
+				case '409':
+					if($form_state['clicked_button']['#name'] == 'readiness_assessment_viewed'){
+						$practice_wrapper = entity_metadata_wrapper('user', $practice);
+						$practice_wrapper->field_ep_ra_preparation->set(1);
+						$practice_wrapper->save();			
+						qpp_update_status($practice->uid, 418);
+						qpp_workflow_notifications($status, $practice->uid, 27);
+						qpp_update_status($practice->uid, 410);
+						$form_state['redirect'] = $base_url . '/my-resource-center/'.$practice->uid.'/education';
+						drupal_set_message(t('The changes have been saved.'));
+					}
+					break;			
+			}
+		}	
+	}	
+} 
+
+// page callback function
+function qpp_empowered_planning_education_page(){
+	$content = '';	
+	if((arg(0) && arg(0) == 'my-resource-center') && (arg(1) && is_numeric(arg(1)))){
+		if(qpp_check_point(arg(1)) == TRUE){
+			$status = qpp_check_status(arg(1));
+			$practice = user_load(arg(1));
+			$content .= '<div class="message-box-green clearfix"><p class="on-screen-message">'.node_load(143)->body['und'][0]['value'].'</p></div>';
+			$content .= '<ul>';
+				$content .= '<li>';
+					$content .= '<a href="/my-resource-center/'.arg(1).'/welcome-to-the-qpp-resource-center">Welcome To The QPP Resource Center</a>';
+					if(isset($practice->field_ep_welcome_to_qpp_video['und'][0]['value']) && $practice->field_ep_welcome_to_qpp_video['und'][0]['value'] == 1){
+						$content .= ' <span class="glyphicon glyphicon-check" title="Viewed"></span>';
+					}
+				$content .= '</li>';
+				$content .= '<li>';
+					$content .= '<a href="/my-resource-center/'.arg(1).'/qpp-101">QPP 101</a>';
+					if(isset($practice->field_ep_qpp_101_video['und'][0]['value']) && $practice->field_ep_qpp_101_video['und'][0]['value'] == 1){
+						$content .= ' <span class="glyphicon glyphicon-check" title="Viewed"></span>';
+					}
+				$content .= '</li>';
+				$content .= '<li>';
+					$content .= '<a href="/my-resource-center/'.arg(1).'/readiness-assessment-preparation">Readiness Assessment Preparation</a>';
+					if(isset($practice->field_ep_ra_preparation['und'][0]['value']) && $practice->field_ep_ra_preparation['und'][0]['value'] == 1){
+						$content .= ' <span class="glyphicon glyphicon-check" title="Viewed"></span>';
+					}
+				$content .= '</li>';
+			$content .= '</ul>';
+		}
+	}	
+	return $content;
+}

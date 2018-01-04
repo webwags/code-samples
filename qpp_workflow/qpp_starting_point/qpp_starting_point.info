@@ -1,0 +1,6 @@
+name = QPP Starting Point
+description = Sub module to manage Starting Point functions and workflow.
+core = 7.x
+package = "QPP Workflow"
+
+dependencies[] = qpp_workflow

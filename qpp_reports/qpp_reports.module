@@ -1,0 +1,594 @@
+<?php
+/*
+ * @file
+ * Custom module to generate reports and export to excel
+ *
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function qpp_reports_menu() {
+	$items = array();
+	$items['dashboard/reports'] = array(
+		'title' => 'Reports',
+		'description' => 'QPP Portal Logins and Interactions Reports',
+		'page callback' => 'qpp_reports_page',
+		'access arguments' => array('access_reports_page'),
+	);
+	$items['dashboard/reports/%/%/%'] = array(
+		'title' => 'Reports',
+		'description' => 'QPP Portal Logins and Interactions Reports',
+		'page callback' => 'qpp_reports_page_export',
+		'page arguments' => array(2,3,4),
+		'access arguments' => array('access_reports_page'),
+	);
+	return $items;
+}
+
+/**
+ * Implement hook_permissions()
+ */
+function qpp_reports_permission() {
+	return array(
+		'access_reports_page' => array(
+			'title' => t('Access Reports Page'),
+		),
+	);
+}
+
+/**
+ * Implements hook_user_login
+ */
+function qpp_reports_user_login(&$edit, $account) {
+	global $user;
+	db_insert('users_logins')
+		->fields(array(
+			'uid' => $user->uid,
+			'datetimestamp' => date("Y-m-d H:i:s", time()),
+		))
+		->execute();
+}
+
+/**
+ * Page callback function
+ */
+function qpp_reports_page(){
+	$content = '';
+	$report_form = drupal_get_form('qpp_reports_form');
+	$content .= drupal_render($report_form);
+	return $content;
+}
+
+/**
+ * Reports export callback function
+ */
+function qpp_reports_page_export($type, $start_date, $end_date){
+	$content = '';
+	if($type){
+		switch($type){
+			case 'number-of-practice-logins':
+				$export = array();
+				
+				if(arg(3) && !empty(arg(3))){
+					$start_date = date('m-d-Y',strtotime(arg(3)));
+				}
+
+				if(arg(4) && !empty(arg(4))){
+					$end_date = date('m-d-Y', strtotime(arg(4)));
+				}
+				
+				$export['filename'] = 'practice_logins_report-'.$start_date.'--'.$end_date;
+				
+				// Sheet 1
+				
+				// worksheet title
+				$export['users_logins']['sheet1']['title'] = 'Number of Practice Logins';
+				
+				// report title and date range
+				$export['users_logins']['sheet1']['report_title'] = 'Number of Portal Practice Logins Report';
+				$export['users_logins']['sheet1']['date_range'] = 'Date Range: '.$start_date.' - '.$end_date;
+					
+				// header columns	
+				$export['users_logins']['sheet1']['header'] = array(
+					'username' => 'Username',
+					'state' => 'State',
+					'number_of_logins' => 'Number of Logins',
+					'number_of_clinicians' => 'Number of Clinician in Practice',
+					'total_number_of_logins' => 'Number of Logins x Number of Clinicians in Practice',
+					'grant_sdo' => 'Grant SDO',
+					'commercial_sdo' => 'Commercial SDO',
+					'practice_name' => 'Practice Name',
+					'practice_city' => 'Practice City',
+					'practice_tin' => 'Practice TIN',
+					'practice_npis' => 'NPIs',
+				);
+				
+				// list all practices
+				$query_user = db_select('users','u');
+				$query_user->leftJoin('users_roles','ur','ur.uid=u.uid');
+				$query_user->leftJoin('role','r','r.rid=ur.rid');
+				$query_user
+				->fields('u',array('uid','name','mail'))
+				->fields('ur',array('uid','rid'))
+				->fields('r',array('rid','name'));
+				$query_user->condition('r.name','Practice');
+				$result = $query_user->execute()->fetchAll();
+				
+				foreach($result as $value){
+					$npi = array();
+					$user = user_load($value->uid);
+					if(isset($user->field_clinicians['und']) && !empty($user->field_clinicians['und'])){
+						foreach($user->field_clinicians['und'] as $fc_value){
+							$field_collection = entity_load('field_collection_item', array($fc_value['value']));
+							$npi[$value->uid][] = $field_collection[$fc_value['value']]->field_doc_npi['und'][0]['value'];
+						}
+					}
+					$query_logins = db_select('users_logins','ul');
+					$query_logins->fields('ul',array('uid','datetimestamp'));
+					$query_logins->condition('ul.uid',$value->uid);
+					
+					if(arg(3) && !empty(arg(3))){
+						$from = date('Y-m-d 00:00:00',strtotime(arg(3)));
+						$query_logins->condition('ul.datetimestamp',$from,'>=');
+					}
+
+					if(arg(4) && !empty(arg(4))){
+						$to_raw = strtotime('+1 day', strtotime(arg(4)));
+						$to = date('Y-m-d 00:00:00', $to_raw);
+						$query_logins->condition('ul.datetimestamp',$to,'<=');
+					}					
+					
+					$login_users = $query_logins->execute()->fetchAll();
+					
+					if(isset($user->field_number_of_providers['und'])){
+						$number_of_clinicians = $user->field_number_of_providers['und'][0]['value'];
+					}
+					
+					$grant_sdo = '';
+					if($user && (isset($user->field_grant_sdo) && !empty($user->field_grant_sdo))){
+						foreach($user->field_grant_sdo['und'] as $grant_sdo_list){
+							$grant_sdo = qpp_set_term_name($grant_sdo_list['target_id']);
+						}
+					}
+					
+					$commercial_sdo = '';
+					if($user && (isset($user->field_commercial_sdo) && !empty($user->field_commercial_sdo))){
+						foreach($user->field_commercial_sdo['und'] as $commercial_sdo_list){
+							$commercial_sdo = qpp_set_term_name($commercial_sdo_list['target_id']);
+						}
+					}
+					
+					$export['users_logins']['sheet1']['rows'][] = (object)array(
+						'username' => qpp_set_practice_name($value->uid),
+						'state' => (isset($user->field_state_terms['und'][0]['tid']) ? taxonomy_term_load($user->field_state_terms['und'][0]['tid'])->name : ''),
+						'number_of_logins' => count($login_users),
+						'number_of_clinicians' => $number_of_clinicians,
+						'total_number_of_logins' => (count($login_users)*(int)$number_of_clinicians),	
+						'grant_sdo' => $grant_sdo,
+						'commercial_sdo' => $commercial_sdo,
+						'practice_name' => (isset($user->field_practice_name['und'][0]['value']) ? $user->field_practice_name['und'][0]['value'] : ''),
+						'practice_city' => (isset($user->field_city['und'][0]['value']) ? $user->field_city['und'][0]['value'] : ''),
+						'practice_tin' => (isset($user->field_practice_tin['und'][0]['value']) ? $user->field_practice_tin['und'][0]['value'] : ''),
+						'practice_npis' => (!empty($npi) ? implode(', ',$npi[$value->uid]) : ''),
+					);
+				}
+				
+				// Sheet 2
+				
+				// worksheet title
+				$export['users_logins']['sheet2']['title'] = 'Total Number of Logins';
+				
+				// report title and date range
+				$export['users_logins']['sheet2']['report_title'] = 'Total Number of Portal Practice Logins by State Report';
+				$export['users_logins']['sheet2']['date_range'] = 'Date Range: '.$start_date.' - '.$end_date;
+					
+				// header columns
+				$export['users_logins']['sheet2']['header'] = array(
+					'state' => 'State',
+					'number_of_logins' => 'Number of Logins',
+				);
+				
+				// States Terms
+				$vocab = taxonomy_vocabulary_machine_name_load('states');
+				$states_list = taxonomy_get_tree($vocab->vid);
+				$states = array();
+				foreach ($states_list as $state) {
+					$states[$state->tid] = $state->name;
+				}
+				
+				$logins_all_users_all_states = 0;
+				foreach($states as $state => $name){
+					$logins_all_users_per_state = 0;
+			
+					// list all practices
+					$query_user = db_select('users','u');
+					$query_user->leftJoin('users_roles','ur','ur.uid=u.uid');
+					$query_user->leftJoin('role','r','r.rid=ur.rid');
+					$query_user->leftJoin('field_data_field_state_terms','field_state_terms','field_state_terms.entity_id=u.uid');
+					$query_user
+					->fields('u',array('uid','name','mail'))
+					->fields('ur',array('uid','rid'))
+					->fields('r',array('rid','name'))
+					->fields('field_state_terms',array('entity_id','field_state_terms_tid'));	
+					$query_user->condition('r.name','Practice');
+					$query_user->condition('field_state_terms.field_state_terms_tid',$state);
+					$result = $query_user->execute()->fetchAll();	
+					
+					foreach($result as $value){	
+						$query_logins = db_select('users_logins','ul');
+						$query_logins->fields('ul',array('uid','datetimestamp'));
+						$query_logins->condition('ul.uid',$value->uid);
+
+						if(arg(3) && !empty(arg(3))){
+							$from = date('Y-m-d 00:00:00',strtotime(arg(3)));
+							$query_logins->condition('ul.datetimestamp',$from,'>=');
+						}
+
+						if(arg(4) && !empty(arg(4))){
+							$to_raw = strtotime('+1 day', strtotime(arg(4)));
+							$to = date('Y-m-d 00:00:00', $to_raw);
+							$query_logins->condition('ul.datetimestamp',$to,'<=');
+						}							
+						
+						$login_users = $query_logins->execute()->fetchAll();
+
+						$user = user_load($value->uid);
+						if(isset($user->field_number_of_providers['und'])){
+							$number_of_clinicians = $user->field_number_of_providers['und'][0]['value'];
+						}
+						if(!empty($login_users) && !empty($number_of_clinicians)){
+							$logins_per_user_per_state = (count($login_users)*(int)$number_of_clinicians);
+							$logins_all_users_per_state += $logins_per_user_per_state;
+						}
+						
+					}
+					$export['users_logins']['sheet2']['rows'][] = (object)array(
+						'state' => $name,
+						'number_of_logins' => $logins_all_users_per_state,
+					);
+					$logins_all_users_all_states += $logins_all_users_per_state;
+				} 
+				$export['users_logins']['sheet2']['rows_total'][] = (object)array(
+					'state' => 'Total Logins (All States)',
+					'number_of_logins' => $logins_all_users_all_states,
+				);
+				break;
+			case 'number-of-practice-interactions':
+				$export = array();
+									 
+				if(arg(3) && !empty(arg(3))){
+					$start_date = date('m-d-Y',strtotime(arg(3)));
+				}
+
+				if(arg(4) && !empty(arg(4))){
+					$end_date = date('m-d-Y', strtotime(arg(4)));
+				}
+				
+				$export['filename'] = 'practice_interactions_report-'.$start_date.'-'.$end_date;
+				
+				// Sheet 1
+				
+				// worksheet title
+				$export['users_interactions']['sheet1']['title'] = 'Number of Practice Interactions';
+				
+				// report title and date range
+				$export['users_interactions']['sheet1']['report_title'] = 'Number of Practice Interactions Report';
+				$export['users_interactions']['sheet1']['date_range'] = 'Date Range: '.$start_date.' - '.$end_date;
+					
+				// header columns
+				$export['users_interactions']['sheet1']['header'] = array(
+					'username' => 'Username',
+					'state' => 'State',
+					'number_of_interactions' => 'Number of Interactions Recorded in My Team',
+					'number_of_clinicians' => 'Number of Clinician in Practice',
+					'total_number_of_interactions' => 'Number of Interactions x Number of Clinicians in Practice',
+					'number_of_messages' => 'Number of Messages to Practice',
+					'total_number_of_messages' => 'Number of Messages x Number of Clinicians in Practice',
+					'grant_sdo' => 'Grant SDO',
+					'commercial_sdo' => 'Commercial SDO',
+					'practice_name' => 'Practice Name',
+					'practice_city' => 'Practice City',
+					'practice_tin' => 'Practice TIN',
+					'practice_npis' => 'NPIs',
+				);
+				
+				// list all practices
+				$query_user = db_select('users','u');
+				$query_user->leftJoin('users_roles','ur','ur.uid=u.uid');
+				$query_user->leftJoin('role','r','r.rid=ur.rid');
+				$query_user
+				->fields('u',array('uid','name','mail'))
+				->fields('ur',array('uid','rid'))
+				->fields('r',array('rid','name'));
+				$query_user->condition('r.name','Practice');
+				$result = $query_user->execute()->fetchAll();
+				
+				foreach($result as $value){
+					$npi = array();
+					$user = user_load($value->uid);
+					if(isset($user->field_clinicians['und']) && !empty($user->field_clinicians['und'])){
+						foreach($user->field_clinicians['und'] as $fc_value){
+							$field_collection = entity_load('field_collection_item', array($fc_value['value']));
+							$npi[$value->uid][] = $field_collection[$fc_value['value']]->field_doc_npi['und'][0]['value'];
+						}
+					}
+					if(isset($user->field_number_of_providers['und'])){
+						$number_of_clinicians = $user->field_number_of_providers['und'][0]['value'];
+					}
+					
+					$grant_sdo = '';
+					if($user && (isset($user->field_grant_sdo) && !empty($user->field_grant_sdo))){
+						foreach($user->field_grant_sdo['und'] as $grant_sdo_list){
+							$grant_sdo = qpp_set_term_name($grant_sdo_list['target_id']);
+						}
+					}
+
+					$commercial_sdo = '';
+					if($user && (isset($user->field_commercial_sdo) && !empty($user->field_commercial_sdo))){
+						foreach($user->field_commercial_sdo['und'] as $commercial_sdo_list){
+							$commercial_sdo = qpp_set_term_name($commercial_sdo_list['target_id']);
+						}
+					}
+					
+					// list all practices interactions
+					$query_interactions = db_select('node','n');
+					$query_interactions->leftJoin('field_data_field_note_log','field_note_log','field_note_log.field_note_log_target_id=n.nid');
+					$query_interactions
+					->fields('n',array('nid','uid','title','type','created'))
+					->fields('field_note_log',array('entity_id','field_note_log_target_id'));
+					$query_interactions->condition('n.type','note');
+					$query_interactions->condition('field_note_log.entity_id',$value->uid);
+					if(arg(3) && !empty(arg(3))){
+						$from = strtotime(arg(3));
+						$query_interactions->condition('n.created',$from,'>=');
+					}
+					if(arg(4) && !empty(arg(4))){
+						$to = strtotime('+1 day', strtotime(arg(4)));
+						$query_interactions->condition('n.created',$to,'<=');
+					}					
+					$interactions_users = $query_interactions->execute()->fetchAll();
+					
+					$query_messages = db_select('node','n');
+					$query_messages->leftJoin('field_data_field_messages_log','field_messages_log','field_messages_log.field_messages_log_target_id=n.nid');
+					$query_messages
+					->fields('n',array('nid','uid','title','type','created'))
+					->fields('field_messages_log',array('entity_id','field_messages_log_target_id'));
+					$query_messages->condition('n.type','message');
+					$query_messages->condition('field_messages_log.entity_id',$value->uid);
+					if(arg(3) && !empty(arg(3))){
+						$from = strtotime(arg(3));
+						$query_messages->condition('n.created',$from,'>=');
+					}
+					if(arg(4) && !empty(arg(4))){
+						$to = strtotime('+1 day', strtotime(arg(4)));
+						$query_messages->condition('n.created',$to,'<=');
+					}					
+					$messages_users = $query_messages->execute()->fetchAll();
+					
+					if(!empty($interactions_users) OR !empty($messages_users)){
+						$export['users_interactions']['sheet1']['rows'][] = (object)array(
+							'username' => qpp_set_practice_name($value->uid),
+							'state' => (isset($user->field_state_terms['und'][0]['tid']) ? taxonomy_term_load($user->field_state_terms['und'][0]['tid'])->name : ''),
+							'number_of_interactions' => count($interactions_users),
+							'number_of_clinicians' => $number_of_clinicians,
+							'total_number_of_interactions' => (count($interactions_users)*(int)$number_of_clinicians),
+							'number_of_messages' => count($messages_users),
+							'total_number_of_messages' => (count($messages_users)*(int)$number_of_clinicians),
+							'number_of_messages' => count($messages_users),
+							'grant_sdo' => $grant_sdo,
+							'commercial_sdo' => $commercial_sdo,
+							'practice_name' => (isset($user->field_practice_name['und'][0]['value']) ? $user->field_practice_name['und'][0]['value'] : ''),
+							'practice_city' => (isset($user->field_city['und'][0]['value']) ? $user->field_city['und'][0]['value'] : ''),
+							'practice_tin' => (isset($user->field_practice_tin['und'][0]['value']) ? $user->field_practice_tin['und'][0]['value'] : ''),
+							'practice_npis' => (!empty($npi) ? implode(', ',$npi[$value->uid]) : ''),
+						);
+					}
+				}
+				
+				// Sheet 2
+				
+				// worksheet title
+				$export['users_interactions']['sheet2']['title'] = 'Total Number of Interactions';
+				
+				// report title and date range
+				$export['users_interactions']['sheet2']['report_title'] = 'Total Number of Practice Interactions by State Report';
+				$export['users_interactions']['sheet2']['date_range'] = 'Date Range: '.$start_date.' - '.$end_date;
+					
+				// header columns
+				$export['users_interactions']['sheet2']['header'] = array(
+					'state' => 'State',
+					'number_of_interactions' => 'Number of Interactions',
+					'number_of_messages' => 'Number of Messages',
+				);
+				
+				// States Terms
+				$vocab = taxonomy_vocabulary_machine_name_load('states');
+				$states_list = taxonomy_get_tree($vocab->vid);
+				$states = array();
+				foreach ($states_list as $state) {
+					$states[$state->tid] = $state->name;
+				}
+				
+				$interactions_all_users_all_states = 0;
+				$messages_all_users_all_states = 0;
+				foreach($states as $state => $name){
+					$interactions_all_users_per_state = 0;
+					$messages_all_users_per_state = 0;
+					
+					// list all practices
+					$query_user = db_select('users','u');
+					$query_user->leftJoin('users_roles','ur','ur.uid=u.uid');
+					$query_user->leftJoin('role','r','r.rid=ur.rid');
+					$query_user->leftJoin('field_data_field_state_terms','field_state_terms','field_state_terms.entity_id=u.uid');
+					$query_user
+					->fields('u',array('uid','name','mail'))
+					->fields('ur',array('uid','rid'))
+					->fields('r',array('rid','name'))
+					->fields('field_state_terms',array('entity_id','field_state_terms_tid'));	
+					$query_user->condition('r.name','Practice');
+					$query_user->condition('field_state_terms.field_state_terms_tid',$state);
+					$result = $query_user->execute()->fetchAll();	
+					
+					$number_of_clinicians = array();
+					
+					foreach($result as $value){
+						$user = user_load($value->uid);
+						if(isset($user->field_number_of_providers['und'])){
+							$number_of_clinicians = $user->field_number_of_providers['und'][0]['value'];
+						}
+						// list all practices interactions
+						$query_interactions = db_select('node','n');
+						$query_interactions->leftJoin('field_data_field_note_log','field_note_log','field_note_log.field_note_log_target_id=n.nid');
+						$query_interactions
+						->fields('n',array('nid','uid','title','type','created'))
+						->fields('field_note_log',array('entity_id','field_note_log_target_id'));
+						$query_interactions->condition('n.type','note');
+						$query_interactions->condition('field_note_log.entity_id',$value->uid);
+						if(arg(3) && !empty(arg(3))){
+							$from = strtotime(arg(3));
+							$query_interactions->condition('n.created',$from,'>=');
+						}
+						if(arg(4) && !empty(arg(4))){
+							$to = strtotime('+1 day', strtotime(arg(4)));
+							$query_interactions->condition('n.created',$to,'<=');
+						}					
+						$interactions_users = $query_interactions->execute()->fetchAll();
+						
+						$query_messages = db_select('node','n');
+						$query_messages->leftJoin('field_data_field_messages_log','field_messages_log','field_messages_log.field_messages_log_target_id=n.nid');
+						$query_messages
+						->fields('n',array('nid','uid','title','type','created'))
+						->fields('field_messages_log',array('entity_id','field_messages_log_target_id'));
+						$query_messages->condition('n.type','message');
+						$query_messages->condition('field_messages_log.entity_id',$value->uid);
+						if(arg(3) && !empty(arg(3))){
+							$from = strtotime(arg(3));
+							$query_messages->condition('n.created',$from,'>=');
+						}
+						if(arg(4) && !empty(arg(4))){
+							$to = strtotime('+1 day', strtotime(arg(4)));
+							$query_messages->condition('n.created',$to,'<=');
+						}					
+						$messages_users = $query_messages->execute()->fetchAll();
+						
+						if((!empty($interactions_users) OR !empty($messages_users)) && !empty($number_of_clinicians)){
+							$interactions_per_user_per_state = (count($interactions_users)*(int)$number_of_clinicians);
+							$interactions_all_users_per_state += $interactions_per_user_per_state;
+							$messages_per_user_per_state = (count($messages_users)*(int)$number_of_clinicians);
+							$messages_all_users_per_state += $messages_per_user_per_state;
+						}
+
+					}
+					$export['users_interactions']['sheet2']['rows'][] = (object)array(
+						'state' => $name,
+						'number_of_interactions' => $interactions_all_users_per_state,
+						'number_of_messages' => $messages_all_users_per_state,
+					);
+					$interactions_all_users_all_states += $interactions_all_users_per_state;
+					$messages_all_users_all_states += $messages_all_users_per_state;
+				}
+				$export['users_interactions']['sheet2']['rows_total'][] = (object)array(
+					'state' => 'Total Interactions (All States)',
+					'number_of_interactions' => $interactions_all_users_all_states,
+					'number_of_messages' => $messages_all_users_all_states,
+				);
+				break;	
+		}
+	}
+	
+	module_load_include('inc', 'qpp_reports', 'qpp_reports');
+	call_to_export($export);
+	
+	return $content;
+}
+
+/**
+ * Implements hook_form().
+ */
+function qpp_reports_form($form, &$form_state){
+	$form = array();
+	
+	$start_year = '2017';
+	$current_year = date('Y',time());
+	$range = $start_year-$current_year . ':+5';
+	$form['start_date'] = array(
+		'#prefix' => '<div class="report-dates">Select dates to generate a report:',
+		'#type' => 'date_popup',
+		'#date_timezone' => date_default_timezone(),
+		'#date_format' => 'm-d-Y',
+		'#date_year_range' => $range,
+		'#date_label_position' => 'within',
+		'#title' => 'Start Date',
+	);
+	$form['end_date'] = array(
+		'#type' => 'date_popup',
+		'#date_timezone' => date_default_timezone(),
+		'#date_format' => 'm-d-Y',
+		'#date_year_range' => $range,
+		'#date_label_position' => 'within',
+		'#title' => 'End Date',
+		'#suffix' => '</div>',
+	);
+	$form['report_type'] = array(
+		'#type' => 'radios',
+		'#options' => array(1 => 'Number of Practice Logins', 2 => 'Number of Practice Interactions'),
+		'#default_value' => 1,
+		'#suffix' => t('</div>'),
+	);
+	$form['export_to_excel'] = array(
+		'#type' => 'submit',
+		'#value' => t('Export to Excel'),
+		'#prefix' => t('<div class="report-submit">'),
+		'#suffix' => t('</div>'),
+    );
+	return $form;
+}
+
+/**
+ * Implements hook_form_validate().
+ */
+function qpp_reports_form_validate($form, &$form_state){
+	switch($form_state['values']['form_id']){
+		case 'qpp_reports_form':
+			if(empty($form_state['values']['start_date']) && empty($form_state['values']['end_date'])){
+				form_set_error('start_date', 'A valid Start Date is required');
+				form_set_error('end_date', 'A valid End Date is required');
+			}
+			if(!empty($form_state['values']['start_date']) && !empty($form_state['values']['end_date'])){
+				if(strtotime($form_state['values']['end_date']) < strtotime($form_state['values']['start_date'])){
+					form_set_error('end_date', 'End Date needs to be greater than the Start Date');
+				}
+			}
+			break;
+	}
+}
+
+/**
+ * Implements hook_form_submit().
+ */
+function qpp_reports_form_submit($form, &$form_state){
+	global $base_url;
+	switch($form_state['values']['form_id']){	
+		case 'qpp_reports_form':
+			switch($form_state['values']['report_type']){
+				case '1':
+					$form_state['redirect'] = $base_url.'/dashboard/reports/number-of-practice-logins/'.$form_state['values']['start_date'].'/'.$form_state['values']['end_date'];
+					break;
+				case '2':
+					$form_state['redirect'] = $base_url.'/dashboard/reports/number-of-practice-interactions/'.$form_state['values']['start_date'].'/'.$form_state['values']['end_date'];
+					break;
+			}
+			break;
+	}
+}
+
+// set pratice name function
+function qpp_set_practice_name($pid){
+	$practice_name = '';
+	if($pid){
+		$practice = user_load($pid);
+		$practice_name = $practice->field_first_name['und'][0]['value'].' '.$practice->field_last_name['und'][0]['value'];
+	}
+	return $practice_name;
+}

@@ -1,0 +1,162 @@
+ <?php
+function qpp_commercial_registration_menu() {
+	$items = array();
+	$items['user/commercial-registration'] = array(
+		'title' => 'Commercial Only Practice Registration',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('qpp_commercial_registration_registration_page'),
+		'access arguments' => array('access_commercial_registration'),
+	);
+	
+	return $items;	
+}
+
+/**
+* Implement hook_permissions()
+*/
+function qpp_commercial_registration_permission() {
+                return array(
+                                'access_commercial_registration' => array(
+                                                'title' => t('Commercial Only Practice Registration Form'),
+                                ),
+                );
+}
+
+function qpp_commercial_registration_registration_page($form, &$form_state) {
+	$form['practice_name'] = array(
+		'#type' => 'textfield',
+		'#title' => 'Practice Name',
+		'#attributes' => array('class' => array('hidevaluetext')),
+		'#required' => TRUE,
+	);
+	$form['first_name'] = array(
+		'#type' => 'textfield',
+		'#title' => 'First Name',
+		'#attributes' => array('class' => array('hidevaluetext')),
+		'#required' => TRUE,
+	);
+	$form['last_name'] = array(
+		'#type' => 'textfield',
+		'#title' => 'Last Name',
+		'#attributes' => array('class' => array('hidevaluetext')),
+		'#required' => TRUE,
+	);	
+	$form['mail'] = array(
+		'#type' => 'textfield',
+		'#title' => t('E-mail'),
+		'#required' => TRUE,
+	);
+	$form['phone'] = array(
+		'#type' => 'textfield',
+		'#title' => 'Phone',
+		'#attributes' => array('class' => array('hidevaluetext')),
+		'#required' => TRUE,
+	);
+	
+// get a list of States
+$vocab = taxonomy_vocabulary_machine_name_load('states');
+$states_list = taxonomy_get_tree($vocab->vid);
+$states = array();
+foreach ($states_list as $state) {
+	$states[$state->tid] = $state->name;
+}
+
+	$form['state'] = array(
+		'#type' => 'select',
+		'#name' => 'state',
+		'#title' => t('State'),
+		'#options' => $states, 
+		'#multiple' => FALSE, 		
+		 '#required' => TRUE,
+ );
+  $form['description'] = array(
+    '#markup' => '<div><b>' . t('Commercial Contract Dates*') . '</b></div>',
+	);
+$form['start_date'] = array(
+  '#type' => 'date_popup',
+  '#date_format' => 'm/d/Y',
+  '#title' => t('Start date'),
+  '#date_label_position' => 'invisible',
+  '#date_year_range' => '-1:+3',
+   '#required' => TRUE,
+);
+
+$form['end_date'] = array(
+  '#type' => 'date_popup',
+  '#date_format' => 'm/d/Y',
+  '#title' => t('End date'),
+  '#date_label_position' => 'invisible',
+  '#date_year_range' => '-1:+3',
+   '#required' => TRUE,
+);
+	  
+	$form['contract_type'] = array(
+		'#type' => 'select',
+		'#name' => 'contract_type',
+		'#title' => t('Contract Type'),
+		'#options' => qpp_check_commercial_sdo_contract_type(), 
+		'#multiple' => FALSE, 		
+		'#required' => TRUE,
+ );
+	$form['submit'] = array(
+		'#type' => 'submit',
+		'#value' => t('Create new account'),
+		'#submit' => array('qpp_commercial_registration_registration_page_submit'), //,'qpp_practice_status_submit'
+		
+	);	
+	$form['#validate'][] = 'qpp_commercial_registration_registration_page_validate';
+	return $form;
+}
+
+function qpp_commercial_registration_registration_page_validate($form, &$form_state) {
+	$user_exists = user_load_by_mail($form_state['values']['mail']);
+	if($user_exists != ''){
+		form_set_error('mail','This email address already exists.');
+	}
+}
+
+function qpp_commercial_registration_registration_page_submit($form, &$form_state) {
+	global $user;
+	$advisor = user_load($user->uid);
+	$advisorUID = $advisor->uid;
+	$practice_name = $form_state['values']['practice_name'];
+	$first_name = $form_state['values']['first_name'];
+	$last_name = $form_state['values']['last_name'];
+	$phone = $form_state['values']['phone'];
+	$state = $form_state['values']['state'];
+	$commercial_sdo = $advisor->field_sdo['und'][0]['tid'];
+	$contract_type = $form_state['values']['contract_type'];
+	$start_date = $form_state['values']['start_date'];
+	$end_date = $form_state['values']['end_date'];
+	$pass = user_password();
+	$newuser = array(
+	'field_practice_name' => array(LANGUAGE_NONE => array(array('value' => $practice_name))),
+	 'field_first_name' => array(LANGUAGE_NONE => array(array('value' => $first_name))),
+	'field_last_name' => array(LANGUAGE_NONE => array(array('value' => $last_name))),
+	 'name' => $form_state['values']['mail'],
+	 'mail' => $form_state['values']['mail'],
+	 'init' => $form_state['values']['mail'],
+	 'pass' => 'Password123!',
+	'field_phone' => array(LANGUAGE_NONE => array(array('value' => $phone))),
+	'field_state_terms' => array(LANGUAGE_NONE => array(array('tid' => $state))),
+	'field_commercial_sdo' => array(LANGUAGE_NONE => array(array('target_id' => $commercial_sdo))),
+	 'field_contract_type' => array(LANGUAGE_NONE => array(array('tid' => $contract_type))),
+	'field_contract_start_date' => array(LANGUAGE_NONE => array(array('value' => $start_date))),
+	 'field_contract_end_date' => array(LANGUAGE_NONE => array(array('value' => $end_date))),
+	 'field_sdo_type' => array(LANGUAGE_NONE => array(array('tid' => 457))),
+	 'status' => 1,
+	 'access' => REQUEST_TIME,
+	
+	);   
+	     
+	$user = user_save(NULL, $newuser);
+	$user->password = $pass; // Add plain text password into user account to generate mail tokens.
+	_user_mail_notify('register_admin_created', $user);
+	$user = user_load($advisorUID); 
+	drupal_session_regenerate();
+	drupal_set_message('New Practice Added');
+	 
+
+} 
+
+

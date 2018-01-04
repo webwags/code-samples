@@ -1,0 +1,343 @@
+<?php
+/*
+ * @file
+ * Sub module to select Empowered Planning Project Plan based on the criteria provided.
+ *
+ */
+
+/*
+ * Implements hook_menu().
+ */
+function qpp_ep_project_plan_menu(){
+	$items = array();
+	$items['my-resource-center/%/project-plans'] = array(
+		'type' => MENU_NORMAL_ITEM,
+		'title' => 'Project Plans',
+		'description' => 'Project Plans',
+		'page callback' => 'qpp_ep_project_plan_page',
+		'access arguments' => array('access content'),
+	);
+	$items['my-resource-center/%/project-plans/%'] = array(
+		'type' => MENU_NORMAL_ITEM,
+		'title' => 'Project Plan',
+		'description' => 'Project Plan',
+		'page callback' => 'qpp_ep_project_plan_page_content',
+		'access arguments' => array('access content'),
+	);
+	$items['user/%/submit-readiness-assessment'] = array(
+		'type' => MENU_NORMAL_ITEM,
+		'title' => 'Submit Readiness Assessment',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('qpp_ep_project_plan_form'),
+		'access arguments' => array('access content'),
+	);	
+	return $items;
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function qpp_ep_project_plan_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+	$type = null;
+	global $user;
+	$practice = user_load($user->uid);
+	$status = qpp_check_status($user->uid);
+	$reviewRA = array(411, 412, 413, 414, 415, 416, 417);
+	
+	foreach ($router_item["map"] as $map) {
+		if (!isset($map->type)) continue;
+		if ($map->type == "readiness_assessment") {
+			$type = $map->type;
+			break;
+		}
+	}
+	
+	if ($type == null) return;
+	
+	foreach ($data['tabs'][0]['output'] as $key => $value) {
+		if ($value['#link']['path'] == 'node/%/edit' OR $value['#link']['path'] == 'node/%/view') {
+			if(in_array('Practice',$user->roles) && in_array($status,$reviewRA)){
+				unset($data['tabs'][0]['output'][$key]);
+			}
+		}
+	}
+}	
+
+// page callback function
+function qpp_ep_project_plan_page(){
+	$content = '';	
+	if((arg(0) && arg(0) == 'my-resource-center') && (arg(1) && is_numeric(arg(1))) && (arg(2) && arg(2) == 'project-plans')){
+		if(qpp_check_point(arg(1)) == TRUE){
+			$content .= '<div class="message-box-green clearfix"><p class="on-screen-message">'.node_load(144)->body['und'][0]['value'].'</p></div>';
+			$status = qpp_check_status(arg(1));
+			$practice = user_load(arg(1));
+			$reviewRA = array(414, 415, 416, 417);
+			if(in_array($status,$reviewRA)){
+				$entity = entity_load('node', FALSE, array('uid' => $practice->uid, 'type' => 'readiness_assessment'));
+				$actions = array();
+				foreach($entity as $nid => $node){
+					foreach($node->field_ra_question_1['und'] as $answer){
+						switch($answer['value']){
+							// question 1
+							case '1':
+								$content .= '<ul>';
+									$content .= '<li>';
+										$content .= '<a href="/my-resource-center/'.arg(1).'/project-plans/plan-1-1">Submit Test Data Only/Neutral Payment Adjustment</a>';
+									$content .= '</li>';
+								$content .= '</ul>';		
+								break;
+							case '2':
+								$content .= '<ul>';
+									$content .= '<li>';
+										$content .= '<span href="/my-resource-center/'.arg(1).'/project-plans/plan-1-2">Submit Data/Qualify for Positive Payment Adjustment</span>';
+										$content .= '<p>'.node_load(32)->body['und'][0]['value'].'</p>';
+									$content .= '</li>';
+								$content .= '</ul>';							
+								break;
+							case '3':
+								$content .= '<ul>';
+									$content .= '<li>';
+										$content .= '<span href="/my-resource-center/'.arg(1).'/project-plans/plan-1-3">Submit Data/Qualify as a top performer</span>';
+										$content .= '<p>'.node_load(31)->body['und'][0]['value'].'</p>';
+									$content .= '</li>';
+								$content .= '</ul>';
+								break;
+							case '4':
+								$content .= '<ul>';
+									$content .= '<li>';
+										$content .= '<span href="/my-resource-center/'.arg(1).'/project-plans/plan-1-4">Do not plan to participate in MIPS in 2017/4% negative payment adjustment</span>';
+										$content .= '<p>'.node_load(30)->body['und'][0]['value'].'</p>';
+									$content .= '</li>';
+								$content .= '</ul>';
+								break;	
+						}
+					}
+				}
+			}
+		}
+	}
+	return $content;
+}
+
+// page content callback function
+function qpp_ep_project_plan_page_content(){
+	$output = '';
+	if((arg(0) && arg(0) == 'my-resource-center') && (arg(1) && is_numeric(arg(1))) && (arg(2) && arg(2) == 'project-plans') && arg(3)){
+		if(qpp_check_point(arg(1)) == TRUE){
+			$status = qpp_check_status(arg(1));
+			$practice = user_load(arg(1));
+			$reviewRA = array(414, 415, 416, 417);
+			if(in_array($status,$reviewRA)){
+				$entity = entity_load('node', FALSE, array('uid' => $practice->uid, 'type' => 'readiness_assessment'));
+				$actions = array();
+				foreach($entity as $nid => $node){
+					switch(arg(3)){
+						// question 1
+						case 'plan-1-1':
+							$actions['CPIA'][] = 34;
+							$actions['ACI'][] = 86;
+							$actions['Quality'][] = 87;
+							// question 4
+							switch($node->field_ra_question_4['und'][0]['value']){
+								case '1':
+									$actions['CPIA'][] = 83;
+									$actions['ACI'][] = 36;
+									$actions['Quality'][] = 54;
+									break;
+								case '2':
+									$actions['CPIA'][] = 46;
+									$actions['Quality'][] = 93;
+									break;
+								case '3':
+									$actions['ACI'][] = 47;
+									break;
+							}
+							// question 21
+							switch($node->field_ra_question_21['und'][0]['value']){
+								case '1':
+									$actions['Quality'][] = 56;
+									$actions['Quality'][] = 57;
+									$actions['Quality'][] = 58;
+									$actions['Quality'][] = 59;
+									$actions['Quality'][] = 60;
+									break;
+								case '2':
+									$actions['Quality'][] = 61;
+									break;
+								case '3':
+									$actions['Quality'][] = 62;
+									$actions['Quality'][] = 63;
+									$actions['Quality'][] = 64;
+									$actions['Quality'][] = 65;
+									$actions['Quality'][] = 66;
+									break;
+								case '4':
+									$actions['Quality'][] = 67;
+									$actions['Quality'][] = 68;
+									$actions['Quality'][] = 69;
+									$actions['Quality'][] = 70;
+									break;										
+							}
+							// question 4=1 and 22=1 and 26 is not null
+							if((isset($node->field_ra_question_4['und'][0]['value']) && $node->field_ra_question_4['und'][0]['value'] == 1) && (isset($node->field_ra_question_22['und'][0]['value']) && $node->field_ra_question_22['und'][0]['value'] == 1) && isset($node->field_ra_question_26['und'][0]['value'])){
+								$actions['CPIA'][] = 49;
+							}
+							// question 4=2 and 22=2 and 26 is null
+							if((isset($node->field_ra_question_4['und'][0]['value']) && $node->field_ra_question_4['und'][0]['value'] == 2) && (isset($node->field_ra_question_22['und'][0]['value']) && $node->field_ra_question_22['und'][0]['value'] == 2) && !isset($node->field_ra_question_26['und'][0]['value'])){
+								$actions['CPIA'][] = 50;
+							}
+							// question 4=1 and 22=1 or 26 is not null
+							if(((isset($node->field_ra_question_4['und'][0]['value']) && $node->field_ra_question_4['und'][0]['value'] == 1) && (isset($node->field_ra_question_22['und'][0]['value']) && $node->field_ra_question_22['und'][0]['value'] == 1)) OR isset($node->field_ra_question_26['und'][0]['value'])){
+								$actions['CPIA'][] = 51;
+							}
+							// question 4=1 and 22=2 or 26 is null
+							if(((isset($node->field_ra_question_4['und'][0]['value']) && $node->field_ra_question_4['und'][0]['value'] == 1) && (isset($node->field_ra_question_22['und'][0]['value']) && $node->field_ra_question_22['und'][0]['value'] == 2)) OR !isset($node->field_ra_question_26['und'][0]['value'])){
+								$actions['CPIA'][] = 85;
+							}		
+							break;
+						case 'plan-1-2':
+							drupal_set_message(node_load(32)->body['und'][0]['value']);
+							break;
+						case 'plan-1-3':
+							drupal_set_message(node_load(31)->body['und'][0]['value']);
+							break;
+						case 'plan-1-4':
+							drupal_set_message(node_load(30)->body['und'][0]['value']);
+							break;	
+						
+					}
+					// print table from the collection of $actions
+					$output .= '<p><a href="/'.arg(0).'/'.arg(1).'/'.arg(2).'">Back to Project Plans</a></p>';
+					foreach($actions as $category => $value){
+						$output .= '<table class="table">';
+						$output .= '<thead>';
+						$output .= '<tr><th>'.$category.'</th></tr>';
+						$output .= '</thead>';
+						foreach($value as $action){
+							$output .= '<tr>';
+							$output .= '<td>'.qpp_recommended_actions_table($action).'</td>';
+							$output .= '</tr>';
+						}
+						$output .= '<tbody>';
+						$output .= '</tbody>';
+						$output .= '</table>';
+					}
+					
+				}
+			}
+		}
+	}		
+	return $output;
+}
+	
+/*
+ * Implements hook_form_alter().
+ */
+function qpp_ep_project_plan_form_alter(&$form, $form_state, $form_id){
+	switch($form_id){
+		case 'readiness_assessment_node_form':
+			if(((arg(0) && arg(0) == 'node') && (arg(1) && arg(1) == 'add') && (arg(3) && is_numeric(arg(3)))) OR ((arg(0) && arg(0) == 'node') && (arg(1) && is_numeric(arg(1))) && (arg(2) && arg(2) == 'edit'))){
+				if(arg(3) && is_numeric(arg(3))){
+					$practice = user_load(arg(3));
+				}
+				if((arg(0) && arg(0) == 'node') && arg(1) && is_numeric(arg(1))){
+					$node = node_load(arg(1));
+					$practice = user_load($node->uid);
+				}
+				$status = qpp_check_status($practice->uid);	
+				
+				// Custom submit handler for node form
+				if(qpp_check_point($practice->uid) == TRUE && ($status == 410)){
+					$form['actions']['submit']['#submit'][] = 'qpp_ep_project_plan_save_and_submit';
+				}
+				
+				// block pratice from editing the node after submission
+				if((arg(0) && arg(0) == 'node') && arg(1) && is_numeric(arg(1))){
+					global $user;
+					$role = $user->roles;	
+					$reviewRA = array(412, 413, 414, 415, 416, 417);
+					if(in_array('Altarum Advisor', $user->roles) OR in_array('Altarum Manager', $user->roles) OR in_array('Administrator', $user->roles)){
+						
+					}elseif(in_array('QPP Advisor', $user->roles) OR in_array('QPP Manager', $user->roles)){
+						/*$practice_state = qpp_check_practice_state($practice->uid);
+						$participating_states = qpp_check_participating_state($user->uid);
+						if(in_array($practice_state, $participating_states)){
+								
+						}*/
+						$grant_sdo = qpp_check_grant_sdo($practice->uid);
+						$commercial_sdo = qpp_check_commercial_sdo($practice->uid);
+						$sdo_assigned = qpp_check_sdo_assigned($user->uid);
+						if(in_array($grant_sdo, $sdo_assigned)){
+							
+						}else if(in_array($commercial_sdo, $sdo_assigned)){
+							
+						}else{
+							$form['#access'] = FALSE;
+							drupal_set_message('You do not have permissions to edit this content.');
+						}
+					}elseif($node->type == 'readiness_assessment' && in_array($status, $reviewRA)){
+						$form['#access'] = FALSE;
+						drupal_set_message('You do not have permissions to edit this content.');
+					}
+				}
+			}
+			break;
+	}
+	return $form;
+}
+
+/*
+ * Implements hook_form().
+ */
+function qpp_ep_project_plan_form($form, &$form_state){
+	$form = array();
+	$markup = '<p class="lead">Are you ready to submit Readiness Assessment for review to a QPP Advisor?</p>';
+	$form['submit_confirmation'] = array(
+		'#type' => 'markup',
+		'#markup' => $markup,
+	);
+	$form['submit_application'] = array(
+		'#type' => 'submit',
+		'#name' => 'submit_application',
+		'#value' => t('Submit - Yes'),
+		'#submit' => array('qpp_ep_project_plan_save_and_submit'),
+	);
+	$form['submit_application_cancel'] = array(
+		'#type' => 'submit',
+		'#name' => 'submit_application_cancel',
+		'#value' => t('Not Yet'),
+		'#submit' => array('qpp_ep_project_plan_save_and_submit'),		
+	);
+	return $form;
+} 
+
+/*
+ * Custom submit function extends default submit function for user account
+ */
+function qpp_ep_project_plan_save_and_submit($form, &$form_state){
+	global $base_url;
+	// get user id from url
+	if(((arg(0) && arg(0) == 'node') && (arg(1) && arg(1) == 'add') && (arg(3) && is_numeric(arg(3)))) OR ((arg(0) && arg(0) == 'node') && (arg(1) && is_numeric(arg(1))) && (arg(2) && arg(2) == 'edit')) OR ((arg(0) && arg(0) == 'user') && (arg(1) && is_numeric(arg(1))))){
+		if(arg(3) && is_numeric(arg(3))){
+			$practice = user_load(arg(3));
+		}
+		if((arg(0) && arg(0) == 'node') && arg(1) && is_numeric(arg(1))){
+			$node = node_load(arg(1));
+			$practice = user_load($node->uid);
+		}
+		if((arg(0) && arg(0) == 'user') && arg(1) && is_numeric(arg(1))){
+			$practice = user_load(arg(1));
+		}
+		$status = qpp_check_status($practice->uid);
+		if(($status == 410) && $form_state['clicked_button']['#value'] == 'Save'){
+			$form_state['redirect'] = $base_url . '/user/'.$practice->uid.'/submit-readiness-assessment';
+		}elseif(($status == 410) && $form_state['clicked_button']['#value'] == 'Submit - Yes'){
+			qpp_update_status($practice->uid, 411);
+			qpp_workflow_notifications($status, $practice->uid, 24);
+			qpp_update_status($practice->uid, 412);
+			$form_state['redirect'] = $base_url . '/my-resource-center/'.$practice->uid;
+		}elseif(($status == 410) && $form_state['clicked_button']['#value'] == 'Not Yet'){
+			$form_state['redirect'] = $base_url . '/my-resource-center/'.$practice->uid;
+		}
+	}
+}

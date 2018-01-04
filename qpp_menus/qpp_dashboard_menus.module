@@ -1,0 +1,88 @@
+<?php
+
+function qpp_dashboard_menus_block_info(){
+	$blocks['qpp_dashboard_altarum_block'] = array(
+		'info' => t('Dashboard Menu for Altarum Staff'),
+	);
+	$blocks['qpp_dashboard_commercial_block'] = array(
+		'info' => t('Dashboard Menu for Commercial SDOs'),
+	);
+	$blocks['qpp_dashboard_general_block'] = array(
+		'info' => t('Dashboard Menu for All Users'),
+	);
+	$blocks['qpp_dashboard_grant_block'] = array(
+		'info' => t('Dashboard Menu for Grant SDOs'),
+	);
+	$blocks['qpp_dashboard_manager_block'] = array(
+		'info' => t('Dashboard Menu for Managers'),
+	);
+	return $blocks;
+}
+
+
+function qpp_dashboard_menus_block_view($delta = '') {
+	$block = array();
+	$module_path = drupal_get_path('module', 'qpp_dashboard_menus');
+	switch ($delta) {
+		case 'qpp_dashboard_altarum_block':
+			$block['subject'] = t('');
+			$block['content'] = array(
+					'#markup' => theme('qpp_dashboard_altarum_block', array()),
+				);
+		break;
+		case 'qpp_dashboard_commercial_block':
+			$block['subject'] = t('');
+				$block['content'] = array(
+					'#markup' => theme('qpp_dashboard_commercial_block', array()),
+				);
+		break;
+		case 'qpp_dashboard_general_block':
+			$block['subject'] = t('');
+			$block['content'] = array(
+				'#markup' => theme('qpp_dashboard_general_block', array()),
+			);
+		break;
+		case 'qpp_dashboard_grant_block':
+			$block['subject'] = t('');
+			$block['content'] = array(
+				'#markup' => theme('qpp_dashboard_grant_block', array()),
+			);
+		break;
+		case 'qpp_dashboard_manager_block':
+			$block['subject'] = t('');
+			$block['content'] = array(
+				'#markup' => theme('qpp_dashboard_manager_block', array()),
+			);
+	}
+	return $block;
+}
+
+
+function qpp_dashboard_menus_theme(){
+	$module_path = drupal_get_path('module', 'qpp_dashboard_menus');
+	return array(
+		
+		'qpp_dashboard_altarum_block' => array(
+			  'template' => 'qpp_dashboard_altarum_block',
+			  'path' => $module_path.'/templates',
+		),
+		'qpp_dashboard_commercial_block' => array(
+			  'template' => 'qpp_dashboard_commercial_block',
+			  'path' => $module_path.'/templates',
+		),
+		'qpp_dashboard_general_block' => array(
+			  'template' => 'qpp_dashboard_general_block',
+			  'path' => $module_path.'/templates',
+		),
+		'qpp_dashboard_grant_block' => array(
+			  'template' => 'qpp_dashboard_grant_block',
+			  'path' => $module_path.'/templates',
+		),
+		'qpp_dashboard_manager_block' => array(
+			  'template' => 'qpp_dashboard_manager_block',
+			  'path' => $module_path.'/templates',
+		),
+	);
+}
+
+

@@ -1,0 +1,78 @@
+<?php
+/*
+ * @file
+ * Sub module to manage Starting Point functions and workflow.
+ *
+ */
+
+/*
+ * Implements hook_menu().
+ */
+function qpp_starting_point_menu(){
+	$items = array();
+	$items['user/%/submit-application'] = array(
+		'type' => MENU_NORMAL_ITEM,
+		'title' => 'Submit MY TEAM Information for Review',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('qpp_starting_point_form'),
+		'access arguments' => array('access content'),
+	);	
+	return $items;
+} 
+
+/*
+ * Implements hook_form(). Add custom Submit button to User Profile form.
+ */
+function qpp_starting_point_form($form, &$form_state){
+	$form = array();
+	$markup = '<p class="lead">Are you ready to submit your practice\'s MY TEAM information for review to a QPP Advisor?</p>';
+	$form['submit_confirmation'] = array(
+		'#type' => 'markup',
+		'#markup' => $markup,
+	);
+	$form['submit_application'] = array(
+		'#type' => 'submit',
+		'#name' => 'submit_application',
+		'#value' => t('Yes - Submit'),
+		'#submit' => array('qpp_starting_point_save_and_submit'),
+	);
+	$form['submit_application_cancel'] = array(
+		'#type' => 'submit',
+		'#name' => 'submit_application_cancel',
+		'#value' => t('Not Yet'),
+		'#submit' => array('qpp_starting_point_save_and_submit'),		
+	);
+	return $form;
+}
+
+/*
+ * Custom submit function for Save and Submit button
+ */
+function qpp_starting_point_save_and_submit($form, &$form_state){
+	global $base_url;
+	// get user id from url
+	if((arg(0) && arg(0) == 'user') && (arg(1) && is_numeric(arg(1)))){
+		$practice = user_load(arg(1));
+		$status = qpp_check_status($practice->uid);
+		if(($status == 398 OR $status == 399 OR $status == 403) && $form_state['clicked_button']['#value'] == 'Yes - Submit'){
+			switch($status){
+				// change status from Active to Submitted/Review 
+				case '399':
+					qpp_update_status($practice->uid, 400);
+					qpp_workflow_notifications($status, $practice->uid, 17);
+					qpp_update_status($practice->uid, 401);
+					$form_state['redirect'] = $base_url . '/my-resource-center/'.$practice->uid;
+					break;
+				// change status from Review to Re-Submitted/Re-Review	
+				case '403':
+					qpp_update_status($practice->uid, 404);
+					qpp_workflow_notifications($status, $practice->uid, 20);
+					qpp_update_status($practice->uid, 405);
+					$form_state['redirect'] = $base_url . '/my-resource-center/'.$practice->uid;
+					break;
+			}			
+		}elseif(($status == 398 OR $status == 399 OR $status == 403) && $form_state['clicked_button']['#value'] == 'Not Yet'){
+			$form_state['redirect'] = $base_url . '/my-resource-center/'.$practice->uid;
+		}
+	}	
+}

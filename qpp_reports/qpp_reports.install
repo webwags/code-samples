@@ -1,0 +1,93 @@
+<?php
+
+/**
+ * @file
+ * Contains install and update functions for QPP Reports.
+ */
+ 
+/**
+ * Implements hook_schemea
+ */
+function qpp_reports_schema() {
+	$schema['users_logins'] = array(
+		// specification for user logins table
+		'description' => t('User Logins Count'),
+		'fields' => array(
+			'uid' => array(
+				'type' => 'int',
+				'size' => 'normal',
+				'length' => '24',
+			),
+			'datetimestamp' => array(
+				'type' => 'datetime',
+				'mysql_type' => 'DATETIME',
+				'pgsql_type' => 'timestamp without time zone', 
+				'sqlite_type' => 'VARCHAR', 
+				'sqlsrv_type' => 'smalldatetime',
+				'not null' => FALSE, 
+				'sortable' => TRUE, 
+				'views' => TRUE,
+			),
+		),
+		'unique keys' => array(
+			'datetimestamp' => array('datetimestamp'),
+		),
+		'primary key' => array('datetimestamp'),    
+	);
+	return $schema;
+}
+
+/**
+ * Implements hook_enable
+ */
+
+function qpp_reports_enable() {
+	// Create tables.
+	if (db_table_exists('users_logins') == FALSE) {
+		drupal_install_schema('users_logins');
+	}
+}
+
+function qpp_reports_install() {
+	$query = db_select('watchdog','w');
+	$query->fields('w',array('variables','type','severity','message','timestamp'));
+	$query
+	->condition('w.type','user')
+	->condition('w.severity',5)
+	->condition('w.message','Session opened for%','LIKE');
+	$query->orderBy('w.timestamp','ASC');
+	$result = $query->execute()->fetchAll();
+	if(!empty($result)){
+		foreach($result as $value){
+			if(isset($value->variables) && !empty($value->variables)){
+				$username_raw = unserialize($value->variables);
+				$username = $username_raw['%name'];
+				if(isset($username)){
+					$users = db_select('users','u');
+					$users->fields('u',array('uid','name'));
+					$users->condition('u.name',$username);
+					$users_list = $users->execute()->fetchCol(0);
+					if(!empty($users_list)){
+						$uid = $users_list[0];
+						$timestamp = date("Y-m-d H:i:s", $value->timestamp);
+						db_insert('users_logins')
+							->fields(array(
+								'uid' => $uid,
+								'datetimestamp' => $timestamp,
+							))
+							->execute();
+					}
+				}
+				
+			}
+		}
+	}
+}
+
+function qpp_reports_uninstall() {
+	// Drop tables.
+	if (db_table_exists('users_logins')) {
+		db_drop_table('users_logins');
+	}
+	drupal_uninstall_schema('users_logins');
+}

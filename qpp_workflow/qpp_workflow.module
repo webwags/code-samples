@@ -1,0 +1,20 @@
+<?php
+/*
+ * @file
+ * Custom module to set up workflow for QPP Resource Center
+ *
+ */
+
+// include generic functions
+module_load_include('inc', 'qpp_workflow', 'qpp_workflow'); 
+
+
+/*
+ * Implementation of hook_inline_entity_form_entity_form_alter. Hide Create/Cancel buttons from entity forms. 
+ */
+function qpp_workflow_inline_entity_form_entity_form_alter(&$entity_form, $form_state) {
+	if($entity_form['#bundle'] == 'message' OR $entity_form['#bundle'] == 'chat_log' OR $entity_form['#bundle'] == 'note'){
+		$entity_form['actions']['ief_add_save']['#access'] = FALSE;
+	}
+}
+ 

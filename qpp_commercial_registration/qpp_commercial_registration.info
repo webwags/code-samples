@@ -1,0 +1,6 @@
+name = QPP Commercial Registration
+description = A module for Commercial SDO Advisors to Registration Commercial only Pratices.
+core = 7.x
+package = "QPP Workflow"
+version = "7.x-0.1"
+dependencies[] = qpp_workflow

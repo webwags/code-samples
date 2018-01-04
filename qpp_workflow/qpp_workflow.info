@@ -1,0 +1,4 @@
+name = QPP Workflow
+description = Custom module to set up workflow for QPP Resource Center
+core = 7.x
+package = "QPP Workflow"

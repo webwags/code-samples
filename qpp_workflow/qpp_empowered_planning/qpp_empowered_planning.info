@@ -1,0 +1,6 @@
+name = QPP Empowered Planning
+description = Sub module to manage Empowered Planning functions and workflow.
+core = 7.x
+package = "QPP Workflow"
+
+dependencies[] = qpp_workflow

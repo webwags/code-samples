@@ -1,0 +1,35 @@
+<?php
+/*
+ * @file
+ * Sub module to manage QPP Workflow Notifications.
+ *
+ */
+
+/*
+ * Custom function to send notifications after status change
+ */ 
+function qpp_workflow_notifications($sid, $pid, $nid, $mid = NULL){
+	global $base_url;
+	$practice = user_load($pid);
+	$key = $sid;
+	$to = $practice->mail;
+	$from = 'qpp.donotreply@altarum.org';
+	$subject = node_load($nid)->title;
+	$body = node_load($nid)->body['und'][0]['value']."\r\n\r\n";
+	(!is_null($mid) ? $body .= node_load($mid)->body['und'][0]['value']."\r\n\r\n" : ''); // message ID
+	$body .= node_load(26)->body['und'][0]['value']."\r\n\r\n"; // email footer message
+	$body .= $base_url.'/user';
+	$params = array('subject' => $subject, 'body' => $body);
+	if($practice->status == 1){	
+		$mail = drupal_mail('qpp_workflow_notifications', $key, $to, language_default(), $params, $from);	
+	}
+}
+
+/*
+ * Implementation of hook_mail().
+ */
+function qpp_workflow_notifications_mail($key, &$message, $params){
+	$language = $message['language'];
+	$message['subject'] = $params['subject'];
+	$message['body'][] = $params['body'];
+}

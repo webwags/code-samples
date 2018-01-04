@@ -1,0 +1,520 @@
+<?php
+/*
+ * @file
+ * Sub module to track the current status of Practice and update status after the next stage is completed.
+ *
+ */
+
+/**
+ * Implements hook_menu_alter(). Changes the Page header for user/register page
+ */ 
+function qpp_practice_status_menu_alter(&$items) {
+	$items['user/register']['title'] = 'Create New Account';
+	$items['user/login']['title'] = 'Login';	
+	$items['user/password']['title'] = 'Request New Password';
+}
+ 
+/*
+ * Implements hook_form_alter(). Add new Submit function.
+ */
+function qpp_practice_status_form_alter(&$form, $form_state, $form_id){
+	switch($form_id){
+		case 'user_register_form':
+			// unset field access for practice
+			$form['field_practice_tin']['und'][0]['value']['#required'] = TRUE;
+			$form['field_practice_designation']['#access'] = FALSE;
+			$form['field_do_you_plan_to_report_data']['#access'] = FALSE;
+			
+			//unset TIN field if admin creating an account
+			global $user;
+			if($user->uid){
+				$form['field_practice_tin']['#access'] = FALSE;
+			}
+			
+			// unset empty options
+			unset($form['field_practice_tcpi_'][$form['field_practice_tcpi_']['#language']]['#options']['_none']);
+			unset($form['field_preferred_method_of_comm'][$form['field_preferred_method_of_comm']['#language']]['#options']['_none']);
+			unset($form['field_do_you_plan_to_report_data'][$form['field_do_you_plan_to_report_data']['#language']]['#options']['_none']);
+			
+			if((arg(0) && arg(0) == 'user') && (arg(1) && arg(1) == 'register')){
+				$form['field_street_address_1']['und'][0]['value']['#required'] = TRUE;
+				$form['field_city']['und'][0]['value']['#required'] = TRUE;
+				$form['field_zip_code']['und'][0]['postal']['#required'] = TRUE;
+				$form['field_your_practice_areas']['und']['#required'] = TRUE;
+				$form['field_number_of_providers']['und'][0]['value']['#required'] = TRUE;
+			}
+			
+			global $user;
+			// updating Participating States field for Admins and Managers
+			$participating_states = array();
+			if($user->uid){
+				$logged_in_user = user_load($user->uid);
+				if(in_array('QPP Manager', $logged_in_user->roles)){
+					if(isset($logged_in_user->field_participating_states['und'])){
+						foreach($logged_in_user->field_participating_states['und'] as $value){
+							$participating_states[$value['tid']] = qpp_set_term_name($value['tid']);	
+						}
+					}
+					$form['field_participating_states']['und']['#options'] = $participating_states;	
+				}
+				if(in_array('Practice', $user->roles) OR in_array('QPP Advisor', $user->roles)){
+					$form['field_participating_states']['#access'] = FALSE;	
+				}
+			}else{
+				$form['field_participating_states']['#access'] = FALSE;
+			}
+			
+			// updating Grant and Commercial SDO field for Admins and Managers
+			$sdos = array();
+			if($user->uid){
+				$logged_in_user = user_load($user->uid);
+				if(in_array('QPP Manager', $logged_in_user->roles)){
+					if(isset($logged_in_user->field_sdo['und'])){
+						foreach($logged_in_user->field_sdo['und'] as $value){
+							$sdos[$value['tid']] = qpp_set_term_name($value['tid']);	
+						}
+					}
+					$form['field_sdo']['und']['#options'] = $sdos;	
+				}
+				if(in_array('Practice', $user->roles) OR in_array('QPP Advisor', $user->roles)){
+					$form['field_sdo']['#access'] = FALSE;	
+				}
+			}else{
+				$form['field_sdo']['#access'] = FALSE;
+			}
+			
+			// adding custom submit validation
+			$form['#validate'][] = 'qpp_practice_status_validate';
+						
+			// adding custom submit handler
+			$form['actions']['submit']['#submit'][] = 'qpp_practice_status_submit';
+			break;
+		
+		case 'user_profile_form':
+			// unset empty option for radio buttons
+			unset($form['field_practice_tcpi_'][$form['field_practice_tcpi_']['#language']]['#options']['_none']);
+			unset($form['field_preferred_method_of_comm'][$form['field_preferred_method_of_comm']['#language']]['#options']['_none']);
+			unset($form['field_do_you_plan_to_report_data'][$form['field_do_you_plan_to_report_data']['#language']]['#options']['_none']);
+			unset($form['field_join_application_review'][$form['field_join_application_review']['#language']]['#options']['_none']);
+			unset($form['field_sp_review'][$form['field_sp_review']['#language']]['#options']['_none']);
+			unset($form['field_sp_re_review'][$form['field_sp_re_review']['#language']]['#options']['_none']);
+			unset($form['field_ep_welcome_to_qpp_video'][$form['field_ep_welcome_to_qpp_video']['#language']]['#options']['_none']);
+			unset($form['field_ep_qpp_101_video'][$form['field_ep_qpp_101_video']['#language']]['#options']['_none']);
+			unset($form['field_ep_readi_assess_review'][$form['field_ep_readi_assess_review']['#language']]['#options']['_none']);
+				
+			if((arg(0) && arg(0) == 'user') && (arg(1) && is_numeric(arg(1)))){
+				global $user;
+				$practice = user_load(arg(1));
+				if($user->uid == $practice->uid && in_array('Practice',$practice->roles)){
+					$form['field_street_address_1']['und'][0]['value']['#required'] = TRUE;
+					$form['field_city']['und'][0]['value']['#required'] = TRUE;
+					$form['field_zip_code']['und'][0]['postal']['#required'] = TRUE;
+					$form['field_your_practice_areas']['und']['#required'] = TRUE;
+					$form['field_number_of_providers']['und'][0]['value']['#required'] = TRUE;
+					$form['field_practice_designation']['und']['#required'] = TRUE;
+					$form['field_practice_tin']['und']['#required'] = TRUE;
+					$form['field_do_you_plan_to_report_data']['und']['#required'] = TRUE;
+				}
+			}
+			
+			// updating Point of Contact field dependencies
+			$form['field_poc_first_name']['und'][0]['value']['#states'] = array(
+    			'visible' => array(
+					':input[name="field_poc_same_as_above[und]"]' => array(
+						'checked' => FALSE,
+					),
+				),
+				'required' => array(
+					':input[name="field_poc_same_as_above[und]"]' => array(
+						'checked' => FALSE,
+					),
+				),
+			);
+			
+			$form['field_poc_last_name']['und'][0]['value']['#states'] = array(
+    			'visible' => array(
+					':input[name="field_poc_same_as_above[und]"]' => array(
+						'checked' => FALSE,
+					),
+				),
+				'required' => array(
+					':input[name="field_poc_same_as_above[und]"]' => array(
+						'checked' => FALSE,
+					),
+				),
+			);
+			
+			$form['field_poc_email']['und'][0]['email']['#states'] = array(
+    			'visible' => array(
+					':input[name="field_poc_same_as_above[und]"]' => array(
+						'checked' => FALSE,
+					),
+				),
+				'required' => array(
+					':input[name="field_poc_same_as_above[und]"]' => array(
+						'checked' => FALSE,
+					),
+				),
+			);
+			
+			$form['field_poc_phone']['und'][0]['value']['#states'] = array(
+    			'visible' => array(
+					':input[name="field_poc_same_as_above[und]"]' => array(
+						'checked' => FALSE,
+					),
+				),
+				'required' => array(
+					':input[name="field_poc_same_as_above[und]"]' => array(
+						'checked' => FALSE,
+					),
+				),
+			);
+			
+			global $user;
+			// updating Participating States field for Admins and Managers
+			$participating_states = array();
+			if($user->uid){
+				$logged_in_user = user_load($user->uid);
+				if(in_array('QPP Manager', $logged_in_user->roles)){
+					if(isset($logged_in_user->field_participating_states['und'])){
+						foreach($logged_in_user->field_participating_states['und'] as $value){
+							$participating_states[$value['tid']] = qpp_set_term_name($value['tid']);	
+						}
+					}
+					$form['field_participating_states']['und']['#options'] = $participating_states;	
+				}
+				if(in_array('Practice', $user->roles) OR in_array('QPP Advisor', $user->roles)){
+					$form['field_participating_states']['#access'] = FALSE;	
+				}
+			}else{
+				$form['field_participating_states']['#access'] = FALSE;
+			}
+
+			// updating Grant and Commercial SDOs field for Admins and Managers			
+			$sdos = array();
+			if($user->uid){
+				$logged_in_user = user_load($user->uid);
+				if(in_array('QPP Manager', $logged_in_user->roles)){
+					if(isset($logged_in_user->field_sdo['und'])){
+						foreach($logged_in_user->field_sdo['und'] as $value){
+							$sdos[$value['tid']] = qpp_set_term_name($value['tid']);	
+						}
+					}
+					$form['field_sdo']['und']['#options'] = $sdos;	
+				}
+				if(in_array('Practice', $user->roles) OR in_array('QPP Advisor', $user->roles)){
+					$form['field_sdo']['#access'] = FALSE;	
+				}
+			}else{
+				$form['field_sdo']['#access'] = FALSE;
+			}
+			
+			// updating grant SDOs field for Practices
+			$grant_sdos = array();
+			if((arg(0) && arg(0) == 'user') && (arg(1) && is_numeric(arg(1)))){
+				$practice = user_load(arg(1));
+				if(isset($practice) && in_array('Practice', $practice->roles)){
+					if(isset($practice->field_state_terms['und'])){
+						$state_tid = $practice->field_state_terms['und'][0]['tid'];
+					}	
+					$state = taxonomy_term_load($state_tid);
+					if(isset($state->field_grant_sdo['und'])){
+						foreach($state->field_grant_sdo['und'] as $value){
+							$sdo_type = qpp_check_sdo_type($value['target_id']);
+							if($sdo_type == 'Grant' OR $sdo_type == 'All'){
+								$grant_sdos[$value['target_id']] = qpp_set_term_name($value['target_id']);
+							}
+						}
+					}
+					if(!empty($grant_sdos)){
+						$form['field_grant_sdo']['und']['#options'] = $grant_sdos;	
+					}
+				}
+			}
+			
+			// updating commercial SDOs field for Practices and commercial contract type field for Practices.
+			$commercial_sdos = array();
+			if((arg(0) && arg(0) == 'user') && (arg(1) && is_numeric(arg(1)))){
+				$practice = user_load(arg(1));
+				if(isset($practice) && in_array('Practice', $practice->roles)){
+					if(isset($practice->field_commercial_sdo['und'][0]['target_id'])){
+						$commercial_sdos[$practice->field_commercial_sdo['und'][0]['target_id']] = qpp_set_term_name($practice->field_commercial_sdo['und'][0]['target_id']);
+					}else if(isset($practice->field_state_terms['und'])){
+						$state_tid = $practice->field_state_terms['und'][0]['tid'];
+						$state = taxonomy_term_load($state_tid);
+						if(isset($state->field_commercial_sdo['und'])){
+							foreach($state->field_commercial_sdo['und'] as $value){
+								$sdo_type = qpp_check_sdo_type($value['target_id']);
+								if($sdo_type == 'Commercial' OR $sdo_type == 'All'){
+									$commercial_sdos[$value['target_id']] = qpp_set_term_name($value['target_id']);
+								}
+							}
+							$vid = taxonomy_vocabulary_machine_name_load('commercial_contract_type')->vid;
+							$vocab = taxonomy_term_load_multiple(array(), array('vid' => $vid));
+							foreach($commercial_sdos as $sdo_tid => $sdo_term){
+								foreach($vocab as $ct_tid => $ct_value){
+									$sdo = taxonomy_term_load($ct_tid)->field_sdo_contract['und'][0]['target_id'];
+									if($sdo_tid == $sdo){
+										$contract_type[$ct_tid] = qpp_set_term_name($ct_tid);
+									}
+								}
+							}
+						}
+					}
+					if(!empty($commercial_sdos)){
+						$form['field_commercial_sdo']['und']['#options'] = $commercial_sdos;	
+					}else{
+						$form['field_commercial_sdo']['und']['#options'] = array('_none' => 'No Commercial SDO Found');
+					}
+					if(!empty($contract_type)){
+						$form['field_contract_type']['und']['#options'] = $contract_type;	
+					}else{
+						$form['field_contract_type']['und']['#options'] = array('_none' => 'No Commercial Contract Type Found');
+					}
+				}
+			}
+		
+			// adding custom submit validation
+			$form['#validate'][] = 'qpp_practice_status_validate';
+			
+			// // adding custom submit handler
+			$form['actions']['submit']['#submit'][] = 'qpp_practice_status_submit';
+			break;
+		case 'readiness_assessment_node_form':
+			// // adding custom submit handler
+			$form['actions']['submit']['#submit'][] = 'qpp_practice_status_submit';
+			break;
+	}
+} 
+
+// Custom validation function for user account
+function qpp_practice_status_validate($form, &$form_state){
+	global $user;
+	if($form_state['values']['form_id'] == 'user_register_form'){
+		if(!$user->uid){
+			if(isset($form_state['values']['field_practice_tin']['und'][0]['value'])){
+				$strlen = strlen($form_state['values']['field_practice_tin']['und'][0]['value']);
+				if($strlen !== 9){
+					form_set_error('field_practice_tin','You must enter 9 digits for the TIN Number');
+				}
+			}
+		}
+	}
+	if($form_state['values']['form_id'] == 'user_profile_form'){
+		if((arg(0) && arg(0) == 'user') && (arg(1) && is_numeric(arg(1)))){
+			$practice = user_load(arg(1));
+			if(isset($form_state['values']['field_join_application_review']['und'][0]['value']) && ($form_state['values']['field_join_application_review']['und'][0]['value'] == 402)){
+				if(isset($practice->field_join_application_review['und'][0]['value']) && $practice->field_join_application_review['und'][0]['value'] != $form_state['values']['field_join_application_review']['und'][0]['value']){
+					if(!isset($form_state['values']['field_messages_log']['und']['form']['title'])){
+						form_set_error('field_join_application_review','Please include a message to practice.');
+					}
+				}elseif(!isset($practice->field_join_application_review['und'][0]['value'])){
+					if(!isset($form_state['values']['field_messages_log']['und']['form']['title'])){
+						form_set_error('field_join_application_review','Please include a message to practice.');
+					}
+				}
+			}		
+			if(isset($form_state['values']['field_sp_review']['und'][0]['value']) && ($form_state['values']['field_sp_review']['und'][0]['value'] == 402 OR $form_state['values']['field_sp_review']['und'][0]['value'] == 403)){
+				if(isset($practice->field_sp_review['und'][0]['value']) && $practice->field_sp_review['und'][0]['value'] != $form_state['values']['field_sp_review']['und'][0]['value']){
+					if(!isset($form_state['values']['field_messages_log']['und']['form']['title'])){
+						form_set_error('field_sp_review','Please include a message to practice.');
+					}
+				}elseif(!isset($practice->field_sp_review['und'][0]['value'])){
+					if(!isset($form_state['values']['field_messages_log']['und']['form']['title'])){
+						form_set_error('field_sp_review','Please include a message to practice.');
+					}
+				}
+			}
+			if(isset($form_state['values']['field_sp_re_review']['und'][0]['value']) && ($form_state['values']['field_sp_re_review']['und'][0]['value'] == 403)){
+				if(isset($practice->field_sp_re_review['und'][0]['value']) && $practice->field_sp_re_review['und'][0]['value'] != $form_state['values']['field_sp_re_review']['und'][0]['value']){
+					if(!isset($form_state['values']['field_messages_log']['und']['form']['title'])){
+						form_set_error('field_sp_re_review','Please include a message to practice.');
+					}
+				}elseif(!isset($practice->field_sp_re_review['und'][0]['value'])){
+					if(!isset($form_state['values']['field_messages_log']['und']['form']['title'])){
+						form_set_error('field_sp_re_review','Please include a message to practice.');
+					}
+				}
+			}
+
+			global $user;
+			$practice = user_load(arg(1));
+			if($user->uid == $practice->uid){
+				if(in_array('Practice',$practice->roles)){
+					if(isset($form_state['values']['field_practice_tin']['und'][0]['value'])){
+						$strlen = strlen($form_state['values']['field_practice_tin']['und'][0]['value']);
+						if($strlen !== 9){
+							form_set_error('field_practice_tin','You must enter 9 digits for the TIN Number');
+						}
+					}
+					if(isset($form_state['values']['field_clinicians']['und'])){
+						foreach($form_state['values']['field_clinicians']['und'] as $key => $field){
+							if(isset($field['field_doc_npi']['und'][0]['value'])){
+								$strlen = strlen($field['field_doc_npi']['und'][0]['value']);
+								if(!is_numeric($field['field_doc_npi']['und'][0]['value'])){
+									form_set_error('field_clinicians]['.LANGUAGE_NONE.']['.$key.'][field_doc_npi','You must enter 10 digits (numerics only) for the NPI Number.');
+								}
+								if(is_numeric($field['field_doc_npi']['und'][0]['value']) && $strlen !== 10){
+									form_set_error('field_clinicians]['.LANGUAGE_NONE.']['.$key.'][field_doc_npi','You must enter 10 digits for the NPI Number');
+								}
+							}			
+						}
+					}
+				}
+
+				if(in_array('Practice',$practice->roles)){
+					if(isset($form_state['values']['field_poc_same_as_above']['und'][0]['value']) && $form_state['values']['field_poc_same_as_above']['und'][0]['value'] == 0){
+						if($form_state['values']['field_poc_first_name']['und'][0]['value'] == ''){
+							form_set_error('field_poc_first_name','Primary contact first Name is required.');
+						}
+						if($form_state['values']['field_poc_last_name']['und'][0]['value'] == ''){
+							form_set_error('field_poc_last_name','Primary contact last Name is required.');
+						}
+						if($form_state['values']['field_poc_email']['und'][0]['email'] == ''){
+							form_set_error('field_poc_email','Primary contact email is required.');
+						}
+						if($form_state['values']['field_poc_phone']['und'][0]['value'] == ''){
+							form_set_error('field_poc_phone','Primary contact phone is required.');
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+/*
+ * Custom submit function extends default submit function for user account
+ */
+function qpp_practice_status_submit($form, &$form_state){
+	global $base_url;
+	$button_clicked = $form_state['clicked_button']['#value'];
+	switch($button_clicked){
+		case 'Create new account':
+			if(isset($form_state['uid'])){
+				qpp_set_grant_sdo($form_state['uid']);	
+				drupal_get_messages('status');
+				$form_state['redirect'] = 'thank-you-joining-qpp-resource-center';
+			}
+			break;
+		case 'Save':
+			// get user id from url
+			if((arg(0) && arg(0) == 'user') && (arg(1) && is_numeric(arg(1)))){
+				global $user;
+				$practice = user_load(arg(1));
+				$status = qpp_check_status($practice->uid);
+				switch($status){
+					// change status from Join Application to Active and redirect to Submission confirmation page
+					case '398':
+						qpp_update_status($practice->uid, 399);
+						if(isset($form_state['values']['field_join_application_review']['und'][0]['value']) && $form_state['values']['field_join_application_review']['und'][0]['value'] == 402){
+							qpp_update_status($practice->uid, 402);	
+							qpp_update_status($practice->uid, 423);	
+						}else if($practice->uid == $user->uid && in_array('Practice', $practice->roles)){
+							$form_state['redirect'] = $base_url . '/user/'.$practice->uid.'/submit-application';
+						}
+						break;			
+					// Redirect to Submission confirmation page (from Active to Submitted)	 
+					case '399':
+						if(isset($form_state['values']['field_join_application_review']['und'][0]['value']) && $form_state['values']['field_join_application_review']['und'][0]['value'] == 402){
+							qpp_update_status($practice->uid, 402);	
+							qpp_update_status($practice->uid, 423);	
+						}else if($practice->uid == $user->uid && in_array('Practice', $practice->roles)){
+							$form_state['redirect'] = $base_url . '/user/'.$practice->uid.'/submit-application';
+						}
+						break;
+					// case 400 from Submitted to QPP Review see QPP Starting Point Module || see QPP Workflow Notofications Module for email					
+					// change status from QPP Review to Ineligible/Require Info/Approve 
+					case '401':
+						if(isset($form_state['values']['field_sp_review']['und'][0]['value']) && $form_state['values']['field_sp_review']['und'][0]['value'] == 402){
+							qpp_update_status($practice->uid, 402);	
+							qpp_update_status($practice->uid, 423);	
+						}
+						if(isset($form_state['values']['field_sp_review']['und'][0]['value']) && $form_state['values']['field_sp_review']['und'][0]['value'] == 403){
+							qpp_update_status($practice->uid, 403);	
+						}
+						if(isset($form_state['values']['field_sp_review']['und'][0]['value']) && $form_state['values']['field_sp_review']['und'][0]['value'] == 406){
+							qpp_update_status($practice->uid, 406);
+							qpp_workflow_notifications($status, $practice->uid, 21);
+							qpp_update_status($practice->uid, 407);	
+						}
+						break;
+								
+					// case 402/423 no action defined
+					// Redirect to Submission confirmation page (from Require Information to Re-Submitted)		
+					case '403':
+						if($practice->uid == $user->uid && in_array('Practice', $practice->roles)){
+							$form_state['redirect'] = $base_url . '/user/'.$practice->uid.'/submit-application';
+						}
+						break;
+					// case 404 from Re-Submitted to QPP Re-Review see QPP Starting Point Module || see QPP Workflow Notofications Module for email
+					// change status from QPP Re-Review to Require more info/Approve to EP Actice	
+					case '405':
+						if(isset($form_state['values']['field_sp_re_review']['und'][0]['value']) && $form_state['values']['field_sp_re_review']['und'][0]['value'] == 402){
+							qpp_update_status($practice->uid, 402);	
+							qpp_update_status($practice->uid, 423);	
+						}
+						if(isset($form_state['values']['field_sp_re_review']['und'][0]['value']) && $form_state['values']['field_sp_re_review']['und'][0]['value'] == 403){
+							qpp_update_status($practice->uid, 403);	
+						}
+						if(isset($form_state['values']['field_sp_re_review']['und'][0]['value']) && $form_state['values']['field_sp_re_review']['und'][0]['value'] == 406){
+							qpp_update_status($practice->uid, 406);
+							qpp_workflow_notifications($status, $practice->uid, 21);
+							qpp_update_status($practice->uid, 407);	
+						}
+						break;
+					// change status from Empowered Planning Active to Watched Welcome Video 	
+					case '407':
+						if(isset($form_state['values']['field_ep_welcome_to_qpp_video']['und'][0]['value']) && $form_state['values']['field_ep_welcome_to_qpp_video']['und'][0]['value'] == 1){
+							qpp_update_status($practice->uid, 408);	
+							qpp_workflow_notifications($status, $practice->uid, 22);
+						}		
+						break;
+					// change status from Watched Welcome Video to QPP 101
+					case '408':
+						if(isset($form_state['values']['field_ep_qpp_101_video']['und'][0]['value']) && $form_state['values']['field_ep_qpp_101_video']['und'][0]['value'] == 1){
+							qpp_update_status($practice->uid, 409);	
+							qpp_workflow_notifications($status, $practice->uid, 22);
+						}
+						break;	
+					// change status from QPP 101 to Readiness Assessment Preparation/Readiness Assessment
+					case '409':
+						if(isset($form_state['values']['field_ep_ra_preparation']['und'][0]['value']) && $form_state['values']['field_ep_ra_preparation']['und'][0]['value'] == 1){
+							qpp_update_status($practice->uid, 418);	
+							qpp_workflow_notifications($status, $practice->uid, 22);
+							qpp_update_status($practice->uid, 410);
+						}
+						break;
+					// case 410 from Readiness Assessment to QPP RA Submitted see QPP EP Project Plan Module
+					// case 411 from QPP RA Submitted to QPP RA Review see QPP EP Project Plan Module
+					// change status from QPP RA Review to QPP RA Approved/Project Plan Active
+					case '412':
+						if(isset($form_state['values']['field_ep_readi_assess_review']['und'][0]['value']) && $form_state['values']['field_ep_readi_assess_review']['und'][0]['value'] == 413){
+							qpp_update_status($practice->uid, 413);
+							qpp_workflow_notifications($status, $practice->uid, 25);
+							qpp_update_status($practice->uid, 414);
+							break;		
+						}
+				}
+			}
+			
+			// send notification if new message is added
+			if(isset($form_state['values']['field_messages_log']['und']['form']['title'])){
+				$status = qpp_check_status($practice->uid);
+				$key = count($practice->field_messages_log['und'])-1;
+				$mid = $practice->field_messages_log['und'][$key]['target_id'];
+				if(($status == 402 OR $status == 423) && (isset($form_state['values']['field_sp_review']['und'][0]['value']) && $form_state['values']['field_sp_review']['und'][0]['value'] == 402) OR (isset($form_state['values']['field_join_application_review']['und'][0]['value']) && $form_state['values']['field_join_application_review']['und'][0]['value'] == 402)){
+					qpp_workflow_notifications($status, $practice->uid, 18, $mid);
+				}
+				else if(($status == 403 OR $status == 405) && ((isset($form_state['values']['field_sp_review']['und'][0]['value']) && $form_state['values']['field_sp_review']['und'][0]['value'] == 403) OR (isset($form_state['values']['field_sp_re_review']['und'][0]['value']) && $form_state['values']['field_sp_re_review']['und'][0]['value'] == 403))){
+					qpp_workflow_notifications($status, $practice->uid, 19, $mid);
+				}
+				else{
+					qpp_workflow_notifications($status, $practice->uid, $mid);
+				}
+			}
+			break;		
+	}
+}  
+
+

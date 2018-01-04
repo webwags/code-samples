@@ -1,0 +1,6 @@
+name = QPP Workflow Notifications
+description = Sub module to manage QPP Workflow Notifications.
+core = 7.x
+package = "QPP Workflow"
+
+dependencies[] = qpp_workflow
